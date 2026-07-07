@@ -41,6 +41,20 @@ $datasets = @(
         A = 1.0
         B = 25.0
         C = 1.1
+    },
+    @{
+        Name = "ais"
+        SourceDir = (Join-Path $WorkspaceRoot "skwcl\_shared_converted\ais")
+        A = 0.75
+        B = 25.0
+        C = 0.8
+    },
+    @{
+        Name = "trajair"
+        SourceDir = (Join-Path $WorkspaceRoot "skwcl\_shared_converted\trajair")
+        A = 0.75
+        B = 25.0
+        C = 0.8
     }
 )
 

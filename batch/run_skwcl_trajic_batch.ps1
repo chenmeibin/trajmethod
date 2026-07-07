@@ -17,7 +17,9 @@ $datasets = @(
     @{ Name = "chengdu"; InputDir = (Join-Path $WorkspaceRoot "skwcl\_shared_converted\chengdu") },
     @{ Name = "geolife"; InputDir = (Join-Path $WorkspaceRoot "skwcl\_shared_converted\Geolife") },
     @{ Name = "t-drive"; InputDir = (Join-Path $WorkspaceRoot "skwcl\_shared_converted\T-drive") },
-    @{ Name = "wuxi"; InputDir = (Join-Path $WorkspaceRoot "skwcl\_shared_converted\wuxi") }
+    @{ Name = "wuxi"; InputDir = (Join-Path $WorkspaceRoot "skwcl\_shared_converted\wuxi") },
+    @{ Name = "ais"; InputDir = (Join-Path $WorkspaceRoot "skwcl\_shared_converted\ais") },
+    @{ Name = "trajair"; InputDir = (Join-Path $WorkspaceRoot "skwcl\_shared_converted\trajair") }
 )
 
 $thresholds = @(

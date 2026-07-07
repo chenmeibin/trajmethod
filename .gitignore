@@ -4,3 +4,17 @@ tools/
 test/
 Data/
 data_small/
+RLTS/batch-rlts/save/
+RLTS/TrajData/
+MARL4TS/TrajData/
+batch/DPTS_prepared/
+batch/DPTS_prepared_newdatasets/
+batch/DPTS_prepared_smoke/
+batch/DPTS_prepared_test/
+lossless/trajic/result/
+online/VOLTCom/data_set/
+online/VOLTCom/results/
+RL4QDTS/TrajData/Geolife_out/
+PILOT-C/cpp_port/dataset_subsets/
+PILOT-C/cpp_port/prepared_inputs/
+PILOT-C/cpp_port/build/

@@ -52,8 +52,13 @@ def main() -> None:
     weights_cw = output_dir / "RL_CW_best.weights.h5"
     log_csv = output_dir / "training_log.csv"
     run_info = output_dir / "run_info.txt"
+    progress_txt = output_dir / "progress.txt"
     best_valid_ratio = float("inf")
     records: list[tuple[int, float, float]] = []
+
+    with log_csv.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["episode", "train_ratio", "valid_ratio"])
 
     def run_validation() -> float:
         eva = []
@@ -119,6 +124,21 @@ def main() -> None:
         if episode % args.show_every == 0:
             valid_ratio = run_validation()
             records.append((episode, train_ratio, valid_ratio))
+            with log_csv.open("a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([episode, train_ratio, valid_ratio])
+            progress_txt.write_text(
+                "\n".join(
+                    [
+                        f"episode={episode}",
+                        f"train_ratio={train_ratio}",
+                        f"valid_ratio={valid_ratio}",
+                        f"best_valid_ratio={min(best_valid_ratio, valid_ratio)}",
+                        f"updated_at={time.strftime('%Y-%m-%d %H:%M:%S')}",
+                    ]
+                ),
+                encoding="utf-8",
+            )
             if valid_ratio < best_valid_ratio:
                 best_valid_ratio = valid_ratio
                 rl_ow.save(str(weights_ow))
@@ -126,11 +146,6 @@ def main() -> None:
             print(f"episode={episode} train_ratio={train_ratio} valid_ratio={valid_ratio}")
 
     wall_clock = time.time() - wall_start
-    with log_csv.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["episode", "train_ratio", "valid_ratio"])
-        writer.writerows(records)
-
     run_info.write_text(
         "\n".join(
             [
@@ -153,6 +168,7 @@ def main() -> None:
                 f"weights_ow={weights_ow}",
                 f"weights_cw={weights_cw}",
                 f"training_log={log_csv}",
+                f"progress_txt={progress_txt}",
             ]
         ),
         encoding="utf-8",
