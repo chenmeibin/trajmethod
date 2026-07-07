@@ -17,7 +17,7 @@ using namespace std;
 #define __my_inline inline
 #define mySnprintf snprintf
 #define myHypot hypot
-#elif __WIN32__ || _MSC_VER
+#elif _WIN32 || __WIN32__ || _MSC_VER
 #include <windows.h>
 #define __my_inline __forceinline
 #define mySnprintf sprintf_s
@@ -2910,27 +2910,12 @@ __my_inline unsigned long long getProcessorTicks() {
 	unsigned int a, d;
 	asm volatile("rdtsc" : "=a" (a), "=d" (d));
 	return (((unsigned long long)a) | (((unsigned long long)d) << 32));
-#elif __WIN32__ || _MSC_VER
-	// See http://www.geisswerks.com/ryan/FAQS/timing.html for details.
-	__try
-	{
-		unsigned long long dest;
-		unsigned long long* destP = &dest;
-		__asm
-		{
-			_emit 0xf        // These two bytes form the 'rdtsc' asm instruction,
-				_emit 0x31       //  available on Pentium I and later.
-				mov esi, destP
-				mov[esi], eax    // Lower 32 bits of tsc.
-				mov[esi + 4], edx    // Upper 32 bits of tsc.
-		}
-		return dest;
+#elif _WIN32 || __WIN32__ || _MSC_VER
+	LARGE_INTEGER counter;
+	if (!QueryPerformanceCounter(&counter)) {
+		myHandleError("Could not read high-resolution performance counter.");
 	}
-	__except (EXCEPTION_EXECUTE_HANDLER)
-	{
-		myHandleError("Could not read time stamp counter.");
-	}
-	return -1L;
+	return (unsigned long long)counter.QuadPart;
 #endif
 }
 
@@ -2987,7 +2972,7 @@ __my_inline unsigned long long myUnsignedLongLongMax(unsigned long long a, unsig
 __my_inline void myMSleep(int millis) {
 #ifdef __unix__
 	usleep(millis * 1000);
-#elif __WIN32__ || _MSC_VER
+#elif _WIN32 || __WIN32__ || _MSC_VER
 	Sleep(millis);
 #endif
 }

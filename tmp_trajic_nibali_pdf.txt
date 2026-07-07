@@ -1,0 +1,1387 @@
+Trajic: An Effective Compression System for
+Trajectory Data
+Aiden Nibali and Zhen He
+Abstract— The need to store vast amounts of trajectory data becomes more problematic as GPS-based tracking devices become
+increasingly prevalent. There are two commonly used approaches for compressing trajectory data. The ﬁrst is the line generalisation
+approach which aims to ﬁt the trajectory using a series of line segments. The second is to store the initial data point and then store the
+remaining data points as a sequence of successive deltas. The line generalisation approach is only effective when given a large error
+margin, and existing delta compression algorithms do not permit lossy compression. Consequently there is an uncovered gap in which
+users expect a good compression ratio by giving away only a small error margin. This paper ﬁlls this gap by extending the delta
+compression approach to allow users to trade a small maximum error margin for large improvements to the compression ratio. In
+addition, alternative techniques are extensively studied for the following two key components of any delta-based approach: predicting
+the value of the next data point and encoding leading zeros. We propose a new trajectory compression system called Trajic based on
+the results of the study. Experimental results show that Trajic produces 1.5 times smaller compressed data than a straight-forward
+delta compression algorithm for lossless compression and produces 9.4 times smaller compressed data than a state-of-the-art line
+generalisation algorithm when using a small maximum error bound of 1 meter.
+Index Terms— Trajectory compression, spatial databases
+Ç
+1I NTRODUCTION
+A
+S GPS-based tracking devices become more popular
+more trajectory data need to be stored. A trajectory
+comprises of a sequence of timestamped sample points,
+each containing a time, latitude and longitude. Using this
+representation a ﬂeet of one thousand cars each recording a
+sample per second requires close to 2 GB of storage space
+per day. Often a backlog of such trajectory data need to be
+stored in a databases. Data compression algorithms can be
+applied to reduce storage requirements. Two contrasting
+state-of-the-art approaches for compressing trajectory data
+are line generalisation and delta compression.
+There are a large number of algorithms that take the
+line generalisation approach to compressing trajectories
+[4], [10], [11], [15]. Line generalisation represents a trajec-
+tory using a series of linear segments created by joining
+selected trajectory points. Compression is achieved by
+discarding unselected trajectory points. A maximum error
+threshold is enforced by ensuring that the points dis-
+carded are within range of the line segments covering the
+points. The main problem with this approach is that it
+c a no n l ya c h i e v eag o o dc o m p r e s s i o nr a t i ow h e ns u c c e s -
+sive data points are close to being linear. However, real-
+life trajectories can contain a lot of curvature and noise,
+sometimes accompanied by low sampling rates which
+amplify the negati ve effect of curves. The only way to
+improve compression in these s ituations is for the user to
+specify a large error margin (such as over 20 meters), but
+many users require higher precision.
+Delta compression achieves lossless compression by stor-
+ing the difference between successive data points in a trajec-
+tory rather than the points themselves. Since these deltas are
+typically small, they may be encoded to save space. In con-
+trast to line generalisation, delta compression is still able to
+achieve reasonable compression ratios despite any noise or
+curvature because it only requires successive points to be
+close to each other rather than to lie within a straight line.
+Furthermore, line generalisation achieves no compression
+for a point that lies only a little outside the maximum error
+bound, whereas delta compression is able to smoothly
+degrade its compression ratio if points become further apart.
+Fig. 1 illustrates the tradeoff between compression ratio
+and maximum error for line generalisation, delta compres-
+sion, and line generalisation enhanced by delta compres-
+sion. As we can see on the graph, delta compression (the
+single point labeled as Delta) has a zero error but a rela-
+tively poor compression ratio. In contrast line generalisation
+can achieve a good compression ratio but only after the
+maximum error is relatively high. Even a combination of
+line generalisation and delta compression does not show
+any improvement in the compression ratio until the maxi-
+mum error is relatively high. Therefore from the ﬁgure we
+can see that there is currently an unﬁlled gap in which the
+user is willing to tolerate only a small error in exchange for
+large improvements in the compression ratio.
+We have designed an algorithm called “Trajic” which can
+ﬁll the above mentioned gap. Fig. 1 shows Trajic can achieve
+a good compression ratio in situations where the user is
+willing to give up only a small amount of precision. In fact,
+even at zero error Trajic is able to achieve a relatively good
+compression ratio. Trajic has two core components: a pre-
+dictor and a method for encoding residuals. The predictor
+/C15The authors are with the Department of Computer Science and Computer
+Engineering, La Trobe University, Bundoora, VIC, Australia.
+E-mail: aiden@nibali.org, z.he@latrobe.edu.au.
+Manuscript received 13 May 2014; revised 20 Feb. 2015; accepted 18 May
+2015. Date of publication 21 May 2015; date of current version 2 Oct. 2015.
+Recommended for acceptance by P. K. Chrysanthis.
+For information on obtaining reprints of this article, please send e-mail to:
+reprints@ieee.org, and reference the Digital Object Identiﬁer below.
+Digital Object Identiﬁer no. 10.1109/TKDE.2015.2436932
+3138 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 27, NO. 11, NOVEMBER 2015
+1041-4347 /C2232015 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+guesses the value of the next data point and then generates
+small residuals representing the difference between the pre-
+dicted and actual values. The residual encoding scheme
+attempts to use as few bits as possible to encode the number
+of leading zeros in the residuals, and is able to achieve lossy
+compression by discarding a number of least signiﬁcant
+bits. We limit the number of bits discarded to stay within
+the maximum user deﬁned error margin.
+Our Trajic compression algorithm is developed by
+extensively studying alternati ve algorithms for predictors
+and leading zero encoding schemes. A comparison was
+made between ﬁve different prediction algorithms rang-
+ing from the simple “constant predictor” (used in existing
+delta compression) to the more conceptually complicated
+c u b i cs p l i n ep r e d i c t o r .I tw a sf o u n dt h a tas i m p l ea n d
+fast predictor, the “temporally-aware linear predictor”,
+results in the most accurate pr edictions. Hence Trajic uti-
+lises this predictor.
+We found different existing leading zero encoding
+schemes to be optimal for different actual residual lengths
+(the length of a residual without counting leading zeros).
+Furthermore, we discovered that in real data sets residual
+lengths have a skewed distribution. This led to our novel
+method for encoding leading zeros which adapts to the dis-
+tribution of residual lengths by incorporating a simple pre-
+pass frequency analysis step.
+Finally, Trajic has linear run-time complexity ( OðNÞ)
+which is the same as simple delta compression. In contrast
+line generalisation algorithms range in complexity from
+OðN logðNÞÞ to OðN2Þ.
+Extensive experiments using real data sets show that
+Trajic can produce 1.5 times smaller compressed data than a
+straightforward delta compression algorithm (used in sys-
+tems such as TrajStore [5]) for lossless compression and 9.4
+times smaller compressed data than a state-of-the-art line
+generalisation algorithm when using a 1 meter error bound.
+In summary, this paper makes the following three main
+contributions.
+/C15We identify that neither of the existing methods of
+line generalisation or delta compression, nor a com-
+bination of the two, allow users to trade a small
+amount of accuracy for large gains in the compres-
+sion ratio. This is a result of a systematic analysis
+and experimentation of existing state-of-the-art line
+generalisation algorithms and existing delta com-
+pression algorithms.
+/C15We develop the Trajic system to ﬁll this important
+gap in the existing literature. Within the Trajic sys-
+tem our main claim to novelty is the creation of a
+very effective and novel residual encoding scheme.
+A related contribution is making the delta compres-
+sion scheme span the spectrum between lossless and
+lossy compression.
+/C15We conduct extensive experiments demonstrating
+the effectiveness of Trajic when applied to real-world
+data sets. We systematically compare the different
+algorithm across the three important metrics of com-
+pression/decompression time, compression ratio
+and error margin.
+This paper begins by brieﬂy discussing existing related work
+and their shortcomings in Section 2. Section 3 describes the
+Trajic system, starting with the predictor then continuing with
+the generation of residuals, leading zero encoding and ﬁnally
+the method for storing residuals. Section 4 presents the experi-
+mental results and ﬁnally Section 5 concludes the paper.
+2R ELATED WORK
+As mentioned in the introduction there are two main
+approaches to compressing trajectories: line generalisation
+and delta compression. We will review the existing work in
+both areas in addition to some other methods that require
+knowledge of a road network.
+2.1 Line Generalisation
+One of the most common trajectory compression schemes is
+line generalisation [4], [6], [10], [11], [13], [21]. The line gen-
+eralisation method originated from cartographers wanting
+to use computers to extract features from detailed data and
+represent them using simple and readable maps. An impor-
+tant part of representing linear features is to solve the line
+generalisation problem.
+The line generalisation problem can be deﬁned as fol-
+lows. Given an ordered set of nþ 1 points in the plane,
+V0;V 1; ... Vn, let C, containing V0V1; ... ; ViViþ 1; ... ; Vn/C01Vn,
+be a chain with n line segments. The problem is to ﬁnd a
+modiﬁed C0 containing less segments which approximates
+C within an acceptable error margin, where the error mar-
+gin is usually deﬁned as the maximum perpendicular dis-
+tance from C0 to C.
+One of the most popular line generalisation algorithms is
+the top-down Douglas-Peucker (DP) algorithm [6], illus-
+trated in Fig. 2. At the beginning the entire set of points is
+approximated using a one line segment connecting the ﬁrst
+and last points of the set. Next the single long line segment
+is replaced by two shorter line segments in which the end of
+the ﬁrst line segment and the start of the second line seg-
+ment correspond to the point that is the furthest (highest
+perpendicular distance) from the original single long line
+segment. This is recursively repeated until there are no
+points whose maximum perpendicular distance is higher
+than a user-deﬁned threshold from the line segment cover-
+ing the point. The original DP algorithm has OðN2Þ time
+complexity, however, various improvements have been
+Fig. 1. An abstract view of compression algorithms with respect to a
+theoretical ideal (produced based on results shown in Fig. 15).
+NIBALI AND HE: TRAJIC: AN EFFECTIVE COMPRESSION SYSTEM FOR TRAJECTORY DATA 3139
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+proposed, including the one by Hershberger and Snoeyink
+[8], which has a time complexity of OðN logðNÞÞ.
+Another approach for solving the line generalisation
+problem is the opening window approach [11]. The opening
+window approach is an incremental algorithm that starts
+with a window that contains the ﬁrst three points of the tra-
+jectory and then progressively “opens” the window until a
+single line segment can no longer represent all of the con-
+tained points accurately enough. Once this happens, a sin-
+gle line segment from the ﬁrst point of the window to the
+second last point in the window is used to approximate the
+current window and the second last point in the current
+window becomes the start of the next window. This is
+repeated until the entire set of points have been connected
+by line segments. The opening window algorithm has
+OðN2Þ worst case time complexity.
+When line generalisation methods are applied to
+achieve trajectory compressi on, the time dimension must
+be incorporated into the error metric. One way of incorpo-
+rating time is to use the synchronised euclidean distance
+(SED) [18]. SED measures the distance from the original
+point to the approximated point adjusted to the same time-
+stamp. Another metric is the Meratnia-By time-distance
+ratio [11] where spatial and temporal information are both
+used separately to decide whether a point is kept or dis-
+carded. For the temporal com ponent, the ratio of the time
+taken to travel the original versus approximated trajectory
+is used. For the spatial component, the position of the orig-
+inal point is compared to its approximated position within
+the compressed trajectory.
+The main limitation with the line generalisation
+approach stems from the fact that it uses straight lines to
+approximate trajectories. Therefore, it works best when
+trajectories are mostly linear. But in real life there are a lot
+of non-linear segments in trajectories due to turning, noise
+and low sampling rates. Line ge neralisation requires very
+large error margins to achieve a good compression ratio in
+these scenarios.
+2.2 Delta Compression
+The standard simple delta co mpression algorithm stores a
+delta for each timestamp in the trajectory. The delta di for
+the ith timestamp equals pi - pi/C01 where pi and pi/C01 are
+the trajectory point values at timestamp i and i/C01
+respectively. The above is typ ically performed separately
+for each of the three components of time, longitude and
+latitude of the trajectory.
+Existing literature in trajectory compression has almost
+exclusively focused on line ge neralisation methods, hence
+delta compression has been l argely ignored in the past.
+However, the TrajStore [5] state-of-the-art trajectory
+database system only employs the standard simple
+delta compression method deﬁned above. This simple
+method suffers from the following three shortcomings: it
+1) employs a constant prediction policy; 2) uses a static
+leading zero encoding scheme; and 3) only performs loss-
+less compression. The ﬁrst shortcoming means TrajStore’s
+delta compression scheme e ssentially predicts the next
+d a t ap o i n tt ob ee x a c t l yt h es a m ea st h ec u r r e n tp o i n ta n d
+s t o r e st h ed i f f e r e n c ea sad elta. In contrast, this paper
+explores a number of different prediction models and con-
+clude a temporally-aware linear predictor gives smaller
+deltas and hence better compression ratios. The second
+shortcoming of TrajStore’s delta compression scheme is
+that it uses a static scheme to encode leading zeros. In con-
+trast, this paper analyzes a number of different possible
+leading zero encoding schemes and concludes that our
+novel dynamic scheme gives the best performance. Finally,
+TrajStore’s delta compressi on scheme only does lossless
+compression. In contrast our Trajic performs both lossless
+and lossy compressing and hence can directly compete
+against the popular line generalisation methods which are
+all lossy compression methods.
+In addition to delta compression, TrajStore also com-
+presses trajectories by clustering similar trajectories together
+and storing only one representative trajectory per cluster.
+This is a complementary technique that may also be used in
+conjunction with our Trajic algorithm.
+2.3 Other Methods
+There are other systems which use knowledge of predeﬁned
+road networks and tracks to minimise the space required
+when storing trajectories [2], [3]. However, such systems are
+not very useful when the network data is not available, or
+the moving objects are not conﬁned to well-deﬁned tracks.
+The Trajic compression scheme does not require such addi-
+tional network information to compress trajectories.
+Mahrsi et al. [7] proposed a one pass sampling based
+method for trajectory compression which selectively
+decides if individual points should be discarded based on
+whether the point can be predicted within a user deﬁned
+error. They claim this method is more computationally efﬁ-
+cient compared to the line generalisation methods but at the
+same time allows an upper error bound to be set for
+Fig. 2. Example illustrating the Douglas Peucker top-down line generalisation algorithm.
+3140 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 27, NO. 11, NOVEMBER 2015
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+compression error. In the paper they propose the use of a
+predictor which is the same as the temporally-aware linear
+predictor (See Section 3.2.3) that we found provides best
+prediction performance. However, Mahrsi et al. use the pre-
+dictor to decide if the next sample point should be dropped
+or not. The next sample point is dropped if the predicted
+point is within a user-deﬁned maximum error margin of the
+actual point. In contrast, we use the predictor to create
+residuals (difference between actual and predicted value).
+Therefore, the system proposed by Mahrsi et al. can be
+thought of as using the temporally-aware linear predictor to
+create a one pass line generalisation algorithm, whereas
+Trajic uses the temporally-aware linear predictor in the con-
+text of delta compression. In addition we perform a compre-
+hensive study comparing ﬁve different predictors whereas
+Mahrsi et al. do not compare their predictor against any
+other predictor.
+Muckell et al. [14] proposed SQUISH, a one pass
+trajectory compression algorithm that is based on the line
+generalisation approach of discarding data points while
+minimizing the increase in compression error. They con-
+sider a current buffer worth of points and prioritize to keep
+points within that buffer that are extreme points based on
+the local estimation of the error. SQUISH improves on line
+generalisation techniques by incurring much lower execu-
+tion time due to the fact it takes only a single pass through
+all the data. However, it still offers similar compression
+ratios and compression error behavior when compared to
+line generalisation algorithms such as the Douglas-Peucker
+algorithm [6]. Therefore it still does not ﬁll the gap of a
+good compression ratio and low compression error.
+3T HE TRAJIC SYSTEM
+3.1 Overview
+The Trajic system takes as input the original trajectory con-
+sisting of a sequence of sample points p1;p 2;p 3; ... ; with
+each point consisting of a timestamp, latitude and longi-
+tude. During compression, Trajic generates an approximate
+trajectory consisting of the approximate points p0
+1;p0
+2;p0
+3; ... ;
+whose error is within user deﬁned bounds. In the case
+where the user requests lossless compression the approxi-
+mate trajectory will be identical to the original trajectory. A
+sequence of residuals r1;r 2;r 3; ::: is incrementally produced
+by Trajic during the compression process. These residuals
+are stored and used to reconstruct the trajectory during later
+decompression.
+Fig. 3 shows the system architecture including all the
+components used to generate the residuals from the original
+points. The system consists of the following four key com-
+ponents: the predictor; the approximate point generator; the
+residual maker; and the leading zero encoder. The predictor
+takes the previous sequence of approximate points
+(p0
+1;p0
+2;p0
+3; ... p0
+i/C01) to generate the next predicted point ( a).
+The residual maker stores the difference between the actual
+original point ( pi) and the corresponding predicted point
+(a) to create the residual ( ri). The residual ( ri) is fed back to
+the approximate point generator and combined with the
+predicted point ( a) to generate the ith approximate point
+(p0
+i). The reason that the ith original point ( pi) is different
+from the approximate point ( p0
+i) is that the residual ( ri)
+may contain inaccuracies when using lossy compression.
+Algorithm 1 summarises this compression process in high-
+level pseudocode. Decompression follows logically from
+compression and is described in Algorithm 2.
+Algorithm 1. High-Level Compression Pseudocode
+Input: A sequence of timestamped points
+Output: A compressed representation of the trajectory
+Function Compress(p0;p 1; ... ;p n) begin
+for i 0 to n do
+a PredictNext(p0
+0;p0
+1; ... ;p0
+i/C01);
+ri CalculateResidual(a, pi);
+// Discard bits from residual for lossy
+compression
+ri DiscardBits(ri);
+p0
+i RestoreResidual(a, ri);
+return Encode(r0;r 1; ... ;r n);
+end
+Algorithm 2. High-Level Decompression Pseudocode
+Input: A compressed representation of the trajectory
+Output: A sequence of timestamped points
+Function Decompress(data) begin
+r0;r 1; ... ;r n Decode(data);
+for i 0 to n do
+a PredictNext(p0
+0;p0
+1; ... ;p0
+i/C01);
+p0
+i RestoreResidual(a, ri);
+return p0
+0;p0
+1; ... ;p0
+n;
+end
+We have engineered our system so that errors do not
+propagate at all between successive points. This is achieved
+by creating approximate points, just as the decompressor
+would, and using these as feedback in the compression
+process so that inaccuracies may be compensated for. For
+Fig. 3. The system architecture used to generate the encoded residuals (compressed data).
+NIBALI AND HE: TRAJIC: AN EFFECTIVE COMPRESSION SYSTEM FOR TRAJECTORY DATA 3141
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+example, assume we are using the constant predictor and
+the original values are p1¼ 3;p 2¼ 3, but due to losses in the
+residual the approximate value p0
+1 is 2 instead. When we
+run the constant predictor, we will predict the next value to
+be a¼ 2 (based on p0
+1) rather than 3 (based on p1). Since the
+next residual generated will be based on the difference
+between our predicted point ( a¼ 2) and the actual point
+(p2¼ 3), we will end up with a larger residual to compen-
+sate for the fact we lost precision earlier on. This effectively
+prevents the errors from propagating.
+A ss h o w ni nF i g .3 ,o n c ea l lo ft h er e s i d u a l sf o rat r a j e c -
+tory have been calculated, a leading zero encoding algo-
+rithm is used to compact the leading zeros. The reason we
+collect the entire trajectory before encoding the leading
+zeros is that our leading zero encoding algorithm uses the
+s t a t i s t i c so ft h ee n t i r es e q u e n c eo fr e s i d u a l st oﬁ n dt h e
+optimal encoding scheme for a p articular trajectory. Each
+set of residuals (time, latitude and longitude) are encoded
+separately and then interleaved during writing. These
+residuals, along with any initial reference points required
+by the predictor, contain enough data to recreate the entire
+trajectory.
+Query processing. Normally, the delta-based compression
+techniques including Trajic need to decompress the entire
+trajectory before query processing can occur. This is because
+each residual value depends on successive previous resid-
+ual values. However, partial decompression is possible if
+we store the actual uncompressed point at regular intervals
+in the compressed trajectory. This allows decompression to
+start at the uncompressed points. The line generalisation
+based compression methods can be partially decompressed
+by just decompressing the data points around the query
+interval.
+3.2 Predicting Points
+In this section, we present a range of predictors, starting
+w i t ht h es i m p l ec o n s t a n tp r e d i c t o ra n de n d i n gw i t ho u r
+temporally-aware linear pred ictor. Although the predictor
+is a fairly rudimentary part of the Trajic system, it is neces-
+sary to select an algorithm which forms a good basis for
+the novel leading zero encoding scheme proposed in
+S e c t i o n3 . 3 .T od e s i g nag o o dp r e d i c t o r ,t w oi m p o r t a n tf a c -
+tors must be taken into consideration: accuracy and efﬁ-
+ciency. An accurate predictor produces predicted points
+which are close to the actual future points, thus minimiz-
+ing residual sizes and reducing the ﬁnal storage space
+required. An efﬁcient predictor predicts points quickly.
+Given that a trajectory consists of a sequence of points con-
+taining time, latitude and longitude, a predictor is com-
+posed of separate functions for predicting the temporal
+and spatial elements of each point.
+To keep the total compressor complexity at OðNÞ, only
+predictors which run in constant time are considered.
+3.2.1 Constant Predictor
+The constant predictor simply predicts the next point to
+be the same as the current one. This essentially corre-
+sponds to delta compression, as the result is storing resid-
+uals between each pair of adjacent points in the trajectory
+(the “deltas”).
+Such a predictor is very simple to implement, and works
+best when samples are taken frequently with small changes
+between them. Realistically this is not often the case due to
+the costs associated with measuring and storing high-reso-
+lution data on portable GPS devices. Hence constant predic-
+tors can perform poorly in real-life data where sample rates
+may be low.
+3.2.2 Basic Linear Predictor
+The basic linear predictor functions by considering the
+previous two points and calculating the displacement
+between them. It then adds this displacement to the last
+point, thus forming a prediction. In general this performs
+better than the constant predictor because it takes advan-
+tage of the tendency of moving objects to have inertia.
+However, when points are not recorded at a constant sam-
+p l er a t et h es i m p l ed i s p l a c e m e n t - b a s e da l g o r i t h mb e g i n s
+to lose some of its accuracy. For example, if the previous
+two points were sampled ﬁve seconds apart, but the next
+point was sampled only one second afterwards, this pre-
+dictor will tend to overestimate the next point by four sec-
+onds’ worth of displacement.
+Fig. 4 demonstrates the spatial prediction process of the
+linear predictor, with actual and approximate points
+labelled with a number indicating order. The displacement
+between actual points #1 and #2 is calculated, shown here
+as a dashed line. This displacement is then added to actual
+point #2 to ﬁnd the location of predicted point #3.
+3.2.3 Temporally-Aware Linear Predictor
+We have found examples in the real data where the sam-
+ple intervals are not uniform. For example the following
+is an example of a sequence of timestamps for a trajectory
+in the Illinois data set [17] (trajectory 01-07-01): 01-0:
+15:16:24, 15:16:33, 15:16:35, 15:16:38, 15:16:39, 15:16:41,
+15:16:42, etc. As you can see the time gap between the
+timestamps are far from uniform. We also found similar
+examples in the Geolife data set [12] (such as trajectory
+200907011110728). Possible sources of non-uniform sam-
+pling include patchy GPS signal coverage caused by
+weather or buildings, software related issues on the
+mobile device, etc.
+In this section we present a temporally-aware linear pre-
+dictor which takes non-uniform timestamp samples into
+consideration when predicting the next location. We do this
+by making predictions based on velocity rather than dis-
+placement, thus eliminating the loss of spatial accuracy
+caused by a variable sample rate. In other words, using dis-
+placement only would result in poor prediction accuracy
+when the sampling rate has high variance. This is because
+an object moving at constant velocity would move twice as
+far if it was sampled at time tcþ 2Dt versus tcþ Dt, where tc
+is the time of the current sample.
+Fig. 4. Visual demonstration of basic linear spatial prediction.
+3142 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 27, NO. 11, NOVEMBER 2015
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+Timestamps are predicted by assuming a constant sam-
+ple rate.
+Table 1 contains a sample set of trajectory points for
+an object moving with constant velocity but recording
+positions with a variable sample rate. The basic linear
+predictor ignores time and assumes that the displacement
+between the second and third points will be the same as
+that between the ﬁrst and second. This results in a pre-
+dicted latitude of 20, which is a considerable overestima-
+tion of the actual latitude, 12 . However, the temporally-
+aware linear predictor calculates the velocity between the
+ﬁrst and second points, assumes constant velocity and
+hence accurately predicts the next latitude to be 12. This
+example shows the importance of giving time special con-
+sideration when forming predictions.
+Algorithm 3. Spatial Prediction Function for the
+Temporally-Aware Linear Predictor
+Input: pastLocs: list of locations at which previous sample
+points were found, time: time of the point we wish to
+ﬁnd the location of
+Output: nextLoc: predicted location of the next sample point
+Function PredictLocation(pastLocs, time)begin
+// Displacement between last two points
+dx pastLocs.last/C0pastLocs.secondLast;
+// Time interval between last two points
+dt pastLocs.last.time - pastLocs.secondLast.time;
+// Calculate velocity
+velocity dx/C4 dt;
+// Assume constant velocity to predict the
+displacement to the next point
+ndx velocity/C2(time/C0pastLocs.last.time);
+// Calculate predicted location
+nextLoc pastLocs.lastþ ndx;
+return nextLoc;
+end
+3.2.4 Complex Predictors
+There are more complex prediction algorithms that
+attempt to ﬁt smooth curves to a group of sample points,
+including Lagrange extrapola tion and natural cubic spline
+extrapolation [1]. In order fo r the entire prediction pro-
+cess to run in linear time it is necessary to only perform
+t h e s em o r ec o m p l i c a t e dp redictions based on a ﬁxed
+number of past points.
+3.3 Generating Residuals
+A residual is typically a small number representing the dif-
+ference between two similar values. Given either value,
+the other may be restored by using the residual. Although
+in our case the two values are the predicted and actual
+coordinates in the form of double-precision ﬂoating-point
+numbers, the algorithms presented in this section can be
+easily extended to compress values represented in other
+formats. Residuals are calc ulated by XORing the binary
+representation of these values. This works because the
+most important parts of a double, the sign and exponent,
+are stored in the most signiﬁcant of the 64 bits (Fig. 5).
+Therefore, since similar numbers tend to share a sign,
+exponent, and a few signiﬁcant bits of the mantissa, resid-
+uals will tend to have many leading zeroes. An example
+residual calculation is demonstrated in Table 2.
+3.3.1 Lossy Compression
+In this section we introduce lossy compression by using
+approximate residuals whic h, when restored, are within
+a known error margin of the original value. This enables
+the creation of much smaller residuals through bit-
+shifting, effectively discarding the D least signiﬁcant bits
+from each residual . Ultimately, smaller residuals require
+less storage space and are desirable. It is ideal to use a
+different value of D for spatial and temporal residuals as
+the range of values and error requirements for each are
+usually different.
+Here we perform error calculations based on the IEEE
+754 standard for storing double-precision ﬂoating-point
+numbers, but the formulae presented should apply to
+other representations of doub les with slight modiﬁcation.
+It is important to ensure that the error induced from the
+lossy compression stays within the user deﬁned maximum
+error. The maximum error possible when discarding D bits
+from a double’s mantissa is errormax¼ð 2D/C052/C02/C052Þ/C22q,
+where q is the value of the double’s exponent (which in the
+case of the IEEE 754 standard is the number stored in the
+11-bit exponent ﬁeld minus an offset of 1023). In order to
+calculate a safe value of D which will not exceed the speci-
+ﬁed error bounds for the entire trajectory, it is necessary to
+know the maximum exponent possible for values in that
+particular trajectory, qmax. By rearranging the formula we
+get D¼b log 2ðerrorbound/C2252/C0qmax þ 1Þc
+TABLE 1
+Temporal Awareness Has a Considerable Impact on the
+Accuracy of Predicted Points when Sample Rate Is Not Fixed
+Time Actual
+latitude
+Linear
+prediction
+Temporally-aware
+linear prediction
+00 - -
+51 0 - -
+61 22 0 1 2
+81 61 4 1 6
+Fig. 5. The relationship between bit position and signiﬁcance in the
+IEEE 754 binary representation of a double ﬂoating-point number is
+monotonic.
+TABLE 2
+Residuals Calculated between Similar Numbers Tend to Have
+Many Leading Zeros
+Value How it’s stored
+Value 1 27.34212484801 40 3b 57 95 7e 79 5a 17
+Value 2 27.34212484972 40 3b 57 95 7e 80 b2 42
+Residual Val. 1 XOR Val. 2 00 00 00 00 00 f9 e8 55
+NIBALI AND HE: TRAJIC: AN EFFECTIVE COMPRESSION SYSTEM FOR TRAJECTORY DATA 3143
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+qmax may be established by determining the maximum
+absolute value in the trajectory and performing bitwise
+manipulation to extract the exponent (Algorithm 4).
+Algorithm 4. Function for Calculating $D$ from a Speci-
+ﬁed Error Bound, Assuming Doubles Are Stored Using
+the IEEE 754 Standard
+Input: error: user-speciﬁed error bound, maxVal: maximum
+value in the trajectory
+Output: D: number of bits which are safe to discard from
+residuals
+Function calculateDiscard(error, maxVal) begin
+// Extract exponent value
+q (maxVal >> 52) & 0x7ff/C01023;
+// Calculate safe number of bits to discard
+D b log 2ðerror/C2252/C0qþ 1Þc;
+return D;
+end
+3.4 Compressing Residuals
+Although each residual is typically a small number, they are
+still technically 64-bit longs. To actually achieve compres-
+sion, the leading zeros of the residuals must be compactly
+encoded.
+In general, a number stored w ith a leading zero encod-
+i n gs c h e m eh a st h r e es e c t i o n s ,s h o w ni nF i g .6 :ah e a d e r
+indicating how many bits are to follow, a small amount
+of zeros for padding (when the header indicates more
+bits than the actual residual length), and the actual data
+representing the residual value. Let l be the length of the
+actual residual in bits ( l2½ 0; 64/C138). Let pðlÞ be the padded
+residual length in bits ( pðlÞ/C21l). Let h be the length of the
+header in bits (the header indicates the value of pðlÞ). The
+aim of such an encoding scheme is to minimise the com-
+bined size of the header and padding for each l,w h i c h
+we will call the encoding overhead ( EOðlÞ). Using the pre-
+viously deﬁned terms, the encoding overhead for a given
+residual length is EOðlÞ¼ hþ pðlÞ/C0 l.Ap e r f e c te n c o d i n g
+scheme would always have EOðlÞ¼ 0,i m p l y i n gah e a d e r
+size of zero ( h¼ 0) and no padding ( pðlÞ¼ l). In reality
+t h i si sn o tp o s s i b l ea st h ed e c o d e rm u s th a v es o m ew a yo f
+knowing where one number ends and the next begins. So
+to devise a good encoder one must reduce the header
+size, h, whilst still keeping the amount of required pad-
+ding, pðlÞ/C0 l, to a minimum.
+3.4.1 Static Leading Zero Encoding
+Most of the current popular leading zero encoding schemes
+may be classiﬁed as being “static”. That is, the scheme does
+not adapt to the particular residuals to be encoded. These
+schemes can be thought of as placing “dividers” at regular
+intervals, then removing as many leading zeros as possible
+up to a divider. The number of dividers remaining in the
+residual are then stored in a header before the residual.
+Fig. 8 demonstrates these steps with the half-byte encoding
+scheme. Using the concept of dividers, each possible value
+of pðlÞ (each possible padded length) corresponds to a
+divider position. Here we describe three such static leading
+zero encoding schemes.
+Bit count. A very basic, yet popular approach to encod-
+ing leading zeros is to use a six-bit header ( h¼ 6)t os t o r e
+the length of the actual residual. This corresponds to plac-
+ing a divider between every single bit in the residual.
+Since the actual length of the residual, l,i se n c o d e di nt h e
+header there is no need for padding ( pðlÞ¼ l). Fig. 9 con-
+tains an example of the bit count encoding scheme.
+Although having no padding was one of the requirements
+for an ideal encoding scheme, the constantly large header
+size results in a suboptimal complete encoding overhead
+(EOðlÞ¼ hþ pðlÞ/C0 l¼ 6).
+Half-byte count. The half-byte count scheme addresses the
+large header issue by allowing some padding as a trade-off
+to reduce the header size. More speciﬁcally, the header
+stores the number of half-bytes required to store the actual
+residual rather than the precise number of bits. This
+Fig. 6. A general encoding scheme with important bit-lengths labelled.
+Fig. 7. Different encoding schemes perform better for different l values.
+Fig. 8. The process for encoding residuals with the half-byte count
+scheme is typical of all static encoding schemes.
+3144 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 27, NO. 11, NOVEMBER 2015
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+information takes less space to store, resulting in a header
+size of 4 bits ( h¼ 4). However, pðlÞ¼d l/C4 4e as a result of
+needing to pad residuals to the nearest half-byte. Assuming
+an even distribution of residual lengths, this scheme yields
+an average encoding overhead of 5.54 which is an improve-
+ment over the bit count scheme. The half-byte encoding pro-
+cess is shown in Fig. 8.
+Byte count. The byte count scheme is very similar to the
+half-byte scheme, but counts bytes instead of half-bytes.
+This results in a smaller header size ( h¼ 3), but demon-
+strates that introducing too much padding has a detrimental
+impact on the encoding overhead. The average EOðlÞ is 6.57
+for an even distribution of residual lengths.
+Analysis. The problem with each of the above three
+encoding schemes is that they are optimal for different
+actual residual lengths ( l). Fig. 7 shows the encoding over-
+head for varying actual residual lengths for all three encod-
+ing schemes. Notice the sawtooth pattern on the graph—
+this is a visual manifestation of the encoding overhead vary-
+ing for different residual lengths.
+In practice a sequence of residuals will have a variety of
+different actual lengths. Therefore none of the above three
+simple encoding schemes will be optimal for all residuals
+within the sequence of residuals. For example, whilst byte-
+counting has the highest average number of excess bits, if
+the majority of residuals have l¼ 32 then it will actually
+perform best for that particular data. This motivates our
+dynamic scheme for encoding leading zeros.
+It is important to note that prior research [16] has
+shown that representing the compressed data at the byte
+level results in faster decomp ression compared to bit level
+storage. This is because decompressing data stored at the
+byte level allows data to be aligned to cache lines and bet-
+ter ﬁts the pipelined architecture of modern CPUs.
+Decompressing data at the bit level requires more CPU
+instructions to shift the bits to become byte aligned. In
+this paper, we emphasis achieving a better compression
+ratio while incurring small error as opposed to extremely
+optimised decompression pe rformance. Hence we have
+adopted a bit level compression algorithm because it
+gives a better compression ra tio. However, for future
+work, it would be interesting to compare our algorithm to
+some byte level compression algorithms for all four met-
+rics of decompression time, compression time, compres-
+sion ratio, and compression error.
+3.4.2 Dynamic Leading Zero Encoding
+The motivation for our dynamic leading zero encoding
+scheme is derived from our obse rvation that real trajecto-
+ries have skew in the frequency distribution of actual
+residual lengths. See Fig. 10 for the frequency distribution
+of actual residual lengths of a trajectory in the Illinois
+data set used in our experiments. Notice the clear skew in
+the distribution.
+The idea behind our dynamic leading zero encoding
+scheme is to use the frequency distribution information to
+dynamically create an encoding scheme which aims to mini-
+mise the encoding overhead for the most frequent residual
+lengths. That is, we intelligently place dividers where they
+are needed most, as illustrated by Fig. 11. The ﬁgure shows
+that the static encoding schemes, which are oblivious to the
+frequency distribution of residual lengths, have many
+wasted dividers (dividers in areas with low value fre-
+quency) and/or large padding (long distance from high fre-
+quency values to nearest higher divider). In contrast, the
+dynamic scheme does not have any wasted dividers and
+does not require many padding bits.
+The system for encoding leading zeros proposed here
+dynamically generates a padded length function pðlÞ based
+on the frequency distribution of l values in the sequence of
+residuals. To ensure an optimal function is obtained, a vari-
+ation of the linear partitioning algorithm [19] is employed.
+This results in values of pðlÞ that are close to l for the most
+frequently occurring l values. Finally, Huffman coding [9] is
+applied to minimize the header length for most frequently
+used values of pðlÞ.
+Given a residual length frequency distribution we aim
+to ﬁnd the padded length function pðlÞ which produces
+the lowest average number of encoding overhead bits
+EOðlÞ for the trajectory. This is achieved by partitioning
+the frequencies using a varying number of dividers and
+Fig. 9. A common encoding scheme uses h¼ 6 bits to store a count
+of the following data bits. In this example the header contains the num-
+ber 11, which indicates that the next 11 bits contain the actual residual.
+Fig. 10. Distribution of latitudinal and longitudinal residuals for the Illinois
+data set, obtained via the temporally-aware linear predictor.
+Fig. 11. The dynamic encoding scheme uses knowledge of the residual
+length frequency distribution to avoid unnecessary encoding overhead
+present in static encoding schemes.
+NIBALI AND HE: TRAJIC: AN EFFECTIVE COMPRESSION SYSTEM FOR TRAJECTORY DATA 3145
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+deﬁning pðlÞ as a function which simply rounds l up to the
+next divider. Since the algorithm aims to minimise the
+average number of excess bits used to store residuals,
+the total cost of a particular p artitioning must approximate
+the average amount of encoding overhead. We deﬁne the
+cost of a partitioning as the average encoding overhead
+of the partitioning which is expressed mathematically
+as follows:
+costðd1; ... ;d nÞ¼
+X64
+l¼0
+ðfl/C2ðpðlÞ/C0 lÞÞþ log 2ðnÞ; (1)
+wherefd1;d 2; ... ;d ng is a set of n dividers, fl is the fre-
+quency with which residuals of length l occurs and
+pðlÞ¼
+d1 l/C20d1
+d2 d1 <l /C20d2
+/C1/C1/C1
+dn dn/C01 <l /C20dn
+1 l>d n:
+8
+>>>><
+>>>>:
+Fig. 12 shows an example of calculating the cost pre-
+sented in Equation (1). In Equation (1) the header length is
+computed as log 2ðnÞ, which effectively assumes all divid-
+ers are represented using the same code word length.
+However, this is just an approximation since we actually
+use Huffman coding (See Section 3.4.3) to implement vari-
+able length code words.
+By ﬁnding the number and arrangement of dividers with
+the lowest total cost, we ﬁnd an efﬁcient function pðlÞ which
+can be used to compactly encode the set of residuals. This is
+achieved by adapting the solution to the well-known parti-
+tion problem [19].
+The following is an example to illustrate the partition
+problem. Suppose four scholars are asked to search through
+every page of every book in a book shelf for some important
+information. Further, suppose the scholars are not allowed
+to rearrange the order of the books and each scholar can
+only work with a single contiguous sequence of books. How
+should the books be divided so that the reading workload is
+most evenly spread amongst the scholars? The problem of
+ﬁnding the optimal divisions is known as the “partition
+problem”.
+Our problem of ﬁnding the optimal set of dividers can be
+mapped to the above partition problem as follows. Each
+residual length maps to a book, the frequency of a residual
+length maps to the number of pages in that particular book,
+and ﬁnally the number of dividers maps to the number
+scholars minus 1. Instead of spreading the workload as
+evenly as possible we are instead interested in minimizing
+the cost deﬁned in Equation (1).
+Although the partition problem is NP-complete, there
+exists a dynamic programming solution which runs in
+pseudo-polynomial time [19]. A variation of this particu-
+l a rs o l u t i o n( A l g o r i t h m5 )i su s e dt os o l v eo u rp r o b l e mo f
+ﬁnding an efﬁcient function pðlÞ. The algorithm works by
+constructing a matrix where row i,c o l u m nj contains the
+minimum average encoding overhead for residuals with
+length/C20i using j dividers. This matrix is labeled as cost
+in Algorithm 5. The algorithm also keep track of the
+divider positions corresponding to the minimum cost
+using the path matrix. Speciﬁcally, path½i/C138½j/C138contains the
+position of the next lowest divider for optimal partition-
+ing with a divider placed after element i and j more
+dividers available. Populating the ﬁrst row and column of
+the cost and path arrays is trivial, and this forms a basis
+for calculating the rest of the entries. The optimal number
+of dividers is found by looking up the average encoding
+overhead for each number of dividers in the matrix and
+selecting the best one.
+Complexity analysis. Although our partitioning algorithm
+(Algorithm 5) runs in pseudo-polynomial time in terms of
+the maximum residual length , it still allows Trajic to perform
+compression in linear time in terms of the number of sample
+points in each trajectory. This is because the partitioning
+algorithm only takes the frequency distribution of residual
+lengths as input and therefore is independent of the number
+of sample points in the trajectory. This effectively means the
+partitioning algorithm only imposes a constant overhead on
+the overall compression algorithm complexity, when com-
+plexity is measured in terms of the number sample points
+in the trajectories.
+Am o r ed e t a i l e da n a l y s i si sa sf o l l o w s .T h ea l g o r i t h m
+is dominated by the complexity of the four nested for
+loops. The complexity of t his nested for loop only
+depends on the constants length of the freq array (maxi-
+mum residual length) and maxDivs which are 64 and 32
+in our experiments, respect ively. We computed the num-
+ber of times the inner most part of the loop is executed
+to be 559,705 times. A modern computer can easily do
+two GFLOPS, which works out to be around 0.28 ms to
+process the entire inner loop .W ec o n d u c t e da ne x p e r i -
+ment, described in Section 4.2.3, which shows that the
+time taken to execute the partitioning algorithm (place
+dividers) is only 1 percent of the total compression time
+(Fig. 14).
+3.4.3 Storing the Codewords and Data Using Huffman
+Coding
+The previous section focused on ﬁnding the optimal
+dividers to reduce encoding overhead. We can further
+reduce the encoding overhead by assigning optimal
+length codewords to each divider based on the frequency
+Fig. 12. The cost of a particular partitioning is calculated by multiplying each frequency with its distance from the next divider, then adding these p rod-
+ucts to the base 2 log of the number of dividers.
+3146 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 27, NO. 11, NOVEMBER 2015
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+distribution of the actual residual lengths. To do this we
+u s eH u f f m a nc o d i n g[ 9 ]t oa s s i g nt h eo p t i m a ll e n g t h
+c o d e w o r d st od i v i d e r sa sh e a d e r s .
+Algorithm 5. Partitioning Algorithm
+Function Partition(freqs) begin
+// The maximum number of dividers
+maxDivs 32;
+// 2D array of minimum cost
+costs Array[length(freqs)][maxDivs];
+// 2D array of divider positions corresponding to
+minimum cost
+path = Array[length(freqs)][maxDivs];
+// Boundry case for no dividers
+for i 0 to length(freqs) -1 do
+costs[i][0] 0;
+for y 0 to i/C01 do
+costs[i][0] costs[i][0] + (i - y)/C2freqs[y];
+// Boundry case for segments of length zero
+for j 1 to maxDivs/C01 do
+costs[0][j] 0;
+// Populate ‘costs‘ and ‘path‘
+for i 1 to length(freqs)/C01 do
+for j 1 to maxDivs/C01 do
+costs[i][j] 1 ;
+for x j/C01 to i/C01 do
+cost costs[x][j/C01];
+for y xþ 1 to i/C01 do
+cost cost + (i/C0y) * freqs[y];
+if cost < costs½i/C138½j/C138then
+costs[i][j] cost;
+path[i][j] x;
+// Find the partitioning with lowest cost
+across varying numbers of dividers
+dividers Null;
+minCost 1 ;
+for n 2 to maxDivs do
+// Find the position of the last divider
+lastDiv length(freqs) - 1;
+while lastDiv > n do
+if freqs½lastDiv/C138> 0 then
+break;
+else
+/C0/C0lastDiv;
+cost costs[lastDiv][n/C01]þ log 2ðnÞ;
+if cost < minCost then
+minCost cost;
+dividers Array[n];
+dividers[n/C01] lastDiv;
+for j n/C02 downto 0 do
+dividers[j] path[dividers[j + 1]][j + 1];
+return dividers;
+end
+A Huffman codeword is assigned to each possible
+divider/output value of pðlÞ, with a divider’s frequency (for
+the purposes of Huffman coding) being the sum of all fre-
+quencies for l values between it and the next smallest
+divider. Once the codebooks for time, latitude and longi-
+tude are written, residuals may be stored by writing the
+appropriate codeword as the header, followed by pðlÞ bits
+containing the actual residual data.
+Consider a set of four-bit residuals where the frequency
+distribution of l values is found to be fo¼ 0:1;f 1¼ 0:4;
+f2¼ 0:1;f 3¼ 0:1;f 4¼ 0:3. Assume the following deﬁnition
+for function pðlÞ:
+pðlÞ¼
+1 l/C201
+31 <l /C203
+43 <l /C204:
+8
+<
+:
+Since there are three possible output values of pðlÞ, three
+Huffman codewords are created. Observe that the most fre-
+quently used value of pðlÞ has the smallest codeword length:
+pðlÞ frequency codeword h
+1 f0þ f1¼ 0:5 01
+3 f2þ f3¼ 0:2 10 2
+4 f3¼ 0:3 11 2
+Now, to store a 2-bit residual, a header containing “10” is
+written out followed by 3 bits containing the 2-bit residual
+padded with a leading zero.
+4E XPERIMENTS
+4.1 Experimental Setup
+4.1.1 Implementation and Hardware
+The Trajic system and other existing compression schemes
+were implemented and tested via C++11 code compiled
+with GCC version 4.7.2 using the /C0O3 optimization ﬂag.
+Results were produced on an AMD Phenom II X4 965 pro-
+cessor clocked at 3.4 GHz with 4 gigabytes of RAM, running
+Ubuntu Linux.
+4.1.2 Algorithms Implemented
+Delta compression. A simple delta compression algorithm
+was implemented with a bit-count leading zero encoding
+scheme. This is the delta compression method used in Traj-
+Store [5].
+TD-SED. TD-SED is a top-down line generalisation algo-
+rithm based on the Douglas-Peucker algorithm [6] described
+in Section 2.1. It utilises the synchronised euclidean distance
+as an error metric to incorporate the time dimension (as
+described in Section 2.1).TD-SED was used in our experi-
+ments to represent the line generalisation approach to trajec-
+tory compression. The reason we chose to compare against
+the Douglas-Peucker algorithm instead of others was due to
+the thorough set of experiments conducted by Muckell et al.
+[13]. Muckell et al. [13] compared seven different state-of-
+the-art trajectory compression algorithms using several real
+data sets. The results showed that Douglas-Peucker offered
+the best performance in terms of both low execution time
+and low synchronized euclidean distance error.
+TD-SEDþ Delta. TD-SED and delta compression were
+combined by ﬁrst applying the line generalisation method
+to remove points, then storing the remaining points as a
+sequence of deltas.
+Trajic. The Trajic system described in this paper was
+implemented with the temporally-aware linear predictor
+and dynamic leading zero encoding.
+SQUISH. The one pass trajectory compression algorithm
+proposed by Muckell et al. [14].
+NIBALI AND HE: TRAJIC: AN EFFECTIVE COMPRESSION SYSTEM FOR TRAJECTORY DATA 3147
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+Clustering compression. The clustering trajectory compres-
+sion algorithm from TrajStore [5]. The clustering algorithm
+is designed to work on partitioned regions of the 2D space.
+We therefore ﬁrst partition the space into 20 /C220 grid cells
+of uniform width and length. We then run the clustering
+algorithm on each cell separately.
+4.1.3 Data Sets
+The two main data sets used for the experiments were a set
+of trajectories recorded by the University of Illinois [17] and
+data from the Microsoft GeoLife project [12].
+The GeoLife data contains 17,621 trajectories (average sam-
+ple rate of 1 per 3 seconds and 1,343 average samples per tra-
+jectory) taken with a variety of GPS devices, and the set
+includes many modes of transport including walking, cycling
+and driving. Over 48,000 hours of data taken from April 2007
+to October 2011 is contained in the complete data set.
+There are 213 trajectories (average sample rate of 1 per
+second and 1,671 average samples per trajectory) in the Uni-
+versity of Illinois data set. The data corresponds to the
+movements of two people over a six month period.
+Since both data sets provide positions in terms of a longi-
+tude and latitude, the haversine formula [20] was used to
+convert distances into kilometers.
+4.2 Results
+Comparisons for Trajic were made with simple delta com-
+pression, the TD-SED line generalisation method, TD-SEDþ
+Delta (a combination of TD-SED and delta compression),
+SQUISH and clustering compression of Trajstore.
+4.2.1 Comparison of Predictors
+In this section we compare the effectiveness and efﬁciency
+of different predictors. Each predictor was run over the
+entire set of trajectories from both Geolife [12] and the Illi-
+nois [17] datasets. We report both the mean prediction time
+and the mean residual length in Table 3. The results for the
+Illinois data set are shown in the table is in brackets. For
+residual length, we report the mean overall residual length
+and also the mean residual length for the spatial and tempo-
+ral components separately. The results show all the predic-
+tors are very fast for prediction. The linear and temporally-
+aware linear predictors are signiﬁcantly more accurate than
+the constant predictor (used by Trajstore for their delta com-
+pression), this is evidenced by the much smaller mean resid-
+ual lengths. For these two data sets the linear and
+temporally-aware linear predictor results in similar residual
+lengths. This is because for most of the trajectories the time
+interval between samples is constant. We did notice that the
+Illinois data set has a slightly larger number of non-uniform
+sample time intervals, hence we can see the temporally-
+aware predictor produces a slightly lower residual length
+than the linear predictor for the Illinois data set. We also
+tested the complex Lagrange extrapolation and spline
+extrapolation predictors but do not report their results due
+to space constraints. The results showed that these more
+complex predictors resulted in longer mean residual lengths
+and also much longer mean prediction times than the linear
+and temporally-aware linear predictors. This is likely due to
+noise in real data sets causing attempts to ﬁt mathematical
+functions to yield poor results.
+4.2.2 Compression Ratio
+Table 4 shows the compression ratio results for the various
+algorithms. Compression ratio was measured by dividing
+the total size of compressed data by the amount of space
+which would be required if each sample point were to be
+stored in 24 bytes (a 64-bit double for each of time, latitude
+and longitude). Hence a smaller compression ratio is desir-
+able, as it corresponds to greater savings in storage space.
+Reasonably strict error bounds of 1 second temporally and 1
+meter spatially (approximately 1 meter) were used for the
+lossy Trajic compression.
+It is evident that the storage gains from Trajic are signiﬁ-
+cant, with as much as 93 percent of space being saved with
+minimal impact on data integrity (less than 1 meter of maxi-
+mum error). Both the lossless and a lossy version of the
+Trajic compression system achieve signiﬁcantly better
+TABLE 3
+The Mean Prediction Time and Mean Residual Lengths
+by Different Predictors Over All Trajectories for
+Both the Geolife and Illinois Data Sets
+Constant Linear Temporally-
+aware
+Mean prediction
+time (ms)
+0.076 (0.135) 0.064 (0.109) 0.084 (0.138)
+Mean overall
+residual length
+30.0 (29.7) 22.4(19.1) 22.4 (19.0)
+Mean spatial
+residual length
+32.4 (32.0) 31.3 (27.9) 31.3 (27.8)
+Mean temporal
+residual length
+25.4 (25.0) 4.31 (1.27) 4.30 (1.27)
+The results for the Geolife data set are not in brackets and the Illinois data set
+results are enclosed in the brackets.
+TABLE 4
+The Compression Ratios and Average Compression/Decompression Times per Trajectory
+Algorithm Compression ratio Compression time (ms) Decompression time (ms)
+GeoLife Illinois GeoLife Illinois GeoLife Illinois
+Delta 0.55 0.39 0.7 0.3 0.8 0.4
+Trajic (lossless) 0.37 0.18 5.2 2.8 0.6 0.2
+TD-SED (1m error) 0.66 0.90 4.5 2.5 0.6 0.4
+TD-SEDþ Delta (1m error) 0.37 0.36 4.3 2.5 0.6 0.3
+Trajic (1m error) 0.07 0.08 1.9 1.2 0.3 0.2
+TD-SED (31m error) 0.12 0.75 3.4 2.5 0.1 0.4
+TD-SEDþ Delta (31m error) 0.07 0.31 3.0 2.6 0.1 0.3
+3148 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 27, NO. 11, NOVEMBER 2015
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+compression ratios than line generalisation and delta com-
+pression for small to medium error bounds. In particular,
+with 1 meter of error Trajic produces 5.3 times smaller com-
+pressed data than TD-SEDþ Delta. This shows that Trajic is
+able to ﬁll the gap where users expect high compression
+whilst giving away only a small amount of precision, as
+was expected.
+4.2.3 Running Time
+Table 4 compares the running time results for the various
+algorithms. In order to test the time performance of the
+compression algorithm presented in this paper, the aver-
+age time taken to compress/decompress a trajectory was
+measured. Once again, the error bounds for lossy com-
+pression were set to 1 second temporally and 1 meter spa-
+tially. For both Trajic and TD-SED, it was found that
+allowing for greater maximum error resulted in a faster
+decompression time. This was expected as when either
+system stores less data in compressed form, it takes less
+time to restore the trajectory. Delta compression is signiﬁ-
+cantly faster than the other compression algorithms in
+terms of compression time, b ut is slower for decompres-
+sion. If compression time is more important than both
+compression ratio and decompression time then using
+delta compression may be preferred. However, in all
+other cases the lossless and 1m error bound variants of
+Trajic yield preferable results.
+Compression ratio versus compression time. We used 100
+points from the GeoLife data set to perform a micro bench-
+mark comparing compression time with ratio for the Trajic,
+TD-SED and TD-SED þ Delta algorithms. Fig. 13 was cre-
+ated by varying the error bounds from 0 to 100 meters and
+calculating the average compression time and ratio for each
+bound. The graph shows that better compression speed is
+achieved at better compression ratios (larger error bounds)
+for each of the algorithms tested. This is due to the nature of
+these algorithms: lower compression ratios are achieved by
+dropping parts of the data, which means that there is less
+data to process. Observe that Trajic is able to compress tra-
+jectories much quicker than the TD-SED variants for all
+ratios in the graph.
+Trajic compression time breakdown. Additional timers were
+added to the compression code as a way of breaking down
+compression time for various stages of the process. We
+selected the largest trajectory in the GeoLife data set for this
+experiment to better distinguish linear time procedures
+from large constant time procedures. Fig. 14 shows that
+compression time is dominated by linear time operations
+such as calculating residuals (this includes predicting), ﬁnd-
+ing residual frequencies, encoding, and writing to disk. A
+key observation is that the pseudo-polynomial time algo-
+rithm for placing dividers (partitioning algorithm) occu-
+pies only 1 percent of the total compression time. This
+result supports our earlier observation that although the
+algorithm has a high time complexity with respect to its
+constant inputs, it is acceptable due to its independence
+from trajectory size.
+4.2.4 Overall Performance
+Considering compression ratio and decompression time
+simultaneously it becomes obvious that Trajic compression
+is fast as well as effective, and should not have a detrimental
+impact on the speed of a larger database system. The line
+generalisation system can only match Trajic’s effectiveness
+if large error bounds are permitted (31 meters as opposed to
+1 meter).
+Furthermore, multiple scatter plots were constructed to
+compare compression/decompression time with trajectory
+length. These conﬁrmed the time complexity analysis,
+revealing a linear time complexity for Trajic.
+4.2.5 Error Bounds
+The relationship between speciﬁed error bounds and
+compression ratio was tested by keeping the temporal
+error constant whilst the varying the spatial error. The
+results across 1,000 trajectories are shown in Fig. 15. Note
+that the x- a x i su s e sal o gt ob a s e1 0s c a l e .T h i sg r a p h
+clearly illustrates the ability of Trajic to ﬁll the gap left by
+existing algorithms which is achieving a good (low) com-
+pression ratio while sacriﬁcing small error margins. In
+particular, at the extremely small maximum error of 0.001
+meters, Trajic produces ﬁve times smaller compressed
+data than TD-SED and 2.8 times smaller compressed data
+compared to TD-SED þ Delta.
+Fig. 15 shows an interesting property: compression
+ratio/ logðerror boundÞ f o rs m a l le r r o rb o u n d si nt h e
+Trajic system. This is becau se the number of discarded
+bits (referred to as D earlier) is proportional to the loga-
+rithm of the error bound. While the number of discarded
+bits is less than most of the residual lengths ( l values),
+Fig. 13. Compression time was plotted against compression ratio to
+compare the behaviours of trajectory compression algorithms.
+Fig. 14. The compression time breakdown was measured for the largest
+trajectory in the GeoLife data set.
+NIBALI AND HE: TRAJIC: AN EFFECTIVE COMPRESSION SYSTEM FOR TRAJECTORY DATA 3149
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+discarding an extra bit effect ively means removing one bit
+from the storage space required for each of the majority of
+residuals. Therefore, compression ratio is proportional to
+the logarithm of the user-speciﬁed error bound until
+the number of discarded bits exceeds the bulk of residual
+lengths, as at this stage most residuals are zero and
+discarding further bits will not reduce their storage
+requirements.
+In contrast, the line generalisation algorithm and
+SQUISH degrades very quickly as maximum error is
+reduced, with Trajic becoming the superior system for
+errors less than approximately 25 meters. At less than 0.2
+meters it becomes impossible for line generalisation to
+improve the compression ratio any further.
+The results in Fig. 15 shows that SQUISH exhibited
+worse compression ratios than TD-SED for all tested error
+bounds. This is likely the required trade-off for other advan-
+tages of the algorithm, such as the ability to specify the
+desired compression ratio as an input parameter and the
+ability to compress trajectories in an online fashion with
+low memory requirements. Furthermore, we can also
+clearly see that SQUISH does not satisfy the situation where
+one wishes to trade a small amount of error (say, less than
+5 m) for large storage improvements, which is the gap that
+Trajic aims to ﬁll. This observation is reinforced by the origi-
+nal SQUISH experimental results performed by its creators,
+where the error maximum error used was on the scale of
+10s of meters.
+4.2.6 Clustering Compression
+Fig. 16 shows the results of just using Trajstore’s clustering
+compression, clustering followed by delta compression
+and clustering followed by lo ssless Trajic compression.
+The data set used was the Illinois data set. We measured
+the compression ratio achieved while varying the maxi-
+mum error bound of the clustering compression. The
+results show compressing the c luster compressed data fur-
+ther with lossless Trajic gives signiﬁcantly better compres-
+s i o nr a t i ot h a nu s i n gc l u s tering followed by delta
+compression. This is because when compared to delta
+compression, Trajic uses a supe rior prediction method and
+leading zero encoding method.
+5C ONCLUSION
+Trajic is an effective, efﬁcient and ﬂexible compression sys-
+tem for the reduction of storage space required for trajectory
+data. It takes advantage of the inertia of objects to predict
+where future points in a trajectory will lie, and then stores
+the residuals between the actual and predicted points using
+a novel dynamic leading zero encoding scheme. Both the
+compressor and decompressor run in linear time, making
+the system feasible for database applications. In addition,
+the compressor works for any reasonable user-speciﬁed
+error bound, achieving good ratios for both lossless and
+varying levels of lossy compression. Trajic ﬁlls a gap exist-
+ing amongst current systems, as it is able to achieve better
+compression ratios than delta and line generalisation for
+low maximum error bounds.
+The compressor proposed here is independent in that
+it can compress and decompress trajectories without any
+additional requirements, such as knowledge of a road
+map or historical data. Consequently it is not difﬁcult to
+integrate the Trajic system into a full trajectory database
+ensemble. For example, the delta compression step
+described in TrajStore [5] can be replaced with the system
+proposed here, whilst still maintaining the functionality
+of the rest of the system as described in the paper; includ-
+ing the clustering algorithm for greater compression
+across multiple similar traje ctories. Our results show that
+T r a j S t o r ei sa b l et oa c h i e v es igniﬁcantly better compres-
+sion ratio compared to delta compression when used fol-
+lowing clustering compression.
+The source code for a working implementation of Trajic
+may be found at https://github.com/anibali/trajic.
+REFERENCES
+[1] R. H. Bartels, J. C. Beatty, and B. A. Barsky, An Introduction to
+Splines for Use in Computer Graphics & Geometric Modeling . San
+Francisco, CA, USA: Morgan Kaufmann, 1987.
+[2] S. Brakatsoulas, D. Pfoser, R. Salas, and C. Wenk, “On map-
+matching vehicle tracking data,” in Proc. 31st Int. Conf. Very Large
+Data Bases, 2005, pp. 853–864.
+Fig. 15. Compression ratio was plotted against spatial error bound
+to compare Trajic with TD-SED (line generalisation) and TD-SED
+enhanced by delta compression over the GeoLife data set.
+Fig. 16. Compression ratio was plotted against clustering maximum spa-
+tial error bound, for just Trajstore clustering compression [5], clustering
+followed by delta compression and clustering followed by lossless Trajic
+compression.
+3150 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 27, NO. 11, NOVEMBER 2015
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 
+[3] H. Cao and O. Wolfson, “Nonmaterialized motion information in
+transport networks,” in Proc. 10th Int. Conf. Database Theory , Berlin,
+Heidelberg, 2005 pp. 173–188.
+[4] M. Chen, M. Xu, and P. Fr €anti, “Compression of GPS trajectories,”
+in Proc. Data Compression Conf., 2012, pp. 62–71.
+[5] P. Cudr /C19e-Mauroux, E. Wu, and S. Madden, “TrajsStore: An adap-
+tive storage system for very large trajectory data sets,” in Proc.
+26th Int. Conf. Data Eng. , 2010, pp. 109–120.
+[6] D. Douglas and T. Peucker, “Algorithms for the reduction of the
+number of points required to represent a line or its caricature,”
+Can. Cartographer, vol. 10, no. 2, pp. 112–122, 1973.
+[7] M. K. El Mahrsi, C. Potier, G. H /C19ebrail, and F. Rossi,
+“Spatiotemporal sampling for trajectory streams,” in Proc. ACM
+Symp. Appl. Comput., New York, NY, USA, 2010 pp. 1627–1628.
+[8] J. Hershberger and J. Snoeyink, “Speeding up the Douglas-
+Peucker line-simpliﬁcation algorithm,” in Proc. 5th Int. Symp. Spa-
+tial Data Handling, 1992, pp. 134–143.
+[9] D. Huffman, “A method for the construction of minimum-redun-
+dancy codes,” Proc. IRE, vol. 40, no. 9, pp. 1098–1101, Sep. 1952.
+[10] R. Lange, F. D €urr, and K. Rothermel, “Efﬁcient real-time trajectory
+tracking,” VLDB J., vol. 20, no. 5, pp. 671–694, 2011.
+[11] N. Meratnia and R. A. de By, “Spatiotemporal compression tech-
+niques for moving point objects,” in Proc. Adv. Database Technol.:
+9th Int. Conf. Extending Database Technol. , 2004, pp. 765–782.
+[12] Microsoft. GeoLife GPS Trajectories. (2011) [Online]. Available:
+http://research.microsoft.com/en-us/downloads/b16d359d-
+d164-469e-9fd4-daa38f2b2e13/
+[13] J. Muckell, J.-H. Hwang, C. T. Lawson, and S. S. Ravi, “Algorithms
+for compressing GPS trajectory data: An empirical evaluation,” in
+Proc. 18th SIGSPATIAL Int. Conf. Adv. Geographic Inf. Syst. , New
+York, NY, USA, 2010, pp. 402–405.
+[14] J. Muckell, J.-H. Hwang, V. Patil, C. T. Lawson, F. Ping, and S. S.
+Ravi, “SQUISH: An online approach for GPS trajectory
+compression,” in Proc. 2nd Int. Conf. Comput. Geospatial Res. Appl. ,
+New York, NY, USA, 2011, pp. 13:1–13:8.
+[15] N. Meratnia and R. de By, “A new perspective on trajectory com-
+pression techniques,”in Proc. ISPRS Commission II and IV, WG II/5,
+II/6, IV/1 and IV/2 Joint Workshop Spatial, Temporal Multi-
+Dimensional Data Model. Anal., 2003.
+[16] T. Neumann and G. Weikum, “RDF-3X: A RISC-style engine for
+RDF,” Proc. VLDB Endow., vol. 1, no. 1, pp. 647–659, Aug. 2008.
+[17] Univ. Illinois at Chicago. Real Trajectory Data. (2006) [Online].
+Available: http://www.cs.uic.edu/~boxu/mp2p/gps_data.html.
+[18] M. Potamias, K. Patroumpas, and T. Se llis, “Sampling trajectory
+streams with spatiotemporal criteria,” inProc. 18th Int. Conf. Sci. Sta-
+tistical Database Manag., Washington, DC, USA, 2006 pp. 275–284.
+[19] S. Skiena, The Algorithm Design Manual , 2nd ed. New York, NY,
+USA: Springer, 2008.
+[20] W. M. Smart, Textbook on Spherical Astronomy , 6th ed. Cambridge,
+U.K.: Cambridge Univ. Press, 1977.
+[21] Z. Xie, H. Wang, and L. Wu, “The improved Douglas-Peucker
+algorithm based on the contour character,” in Proc. 19th Int. Conf.
+Geoinformat., Jun. 2011, pp. 1–5.
+Aiden Nibali is an undergraduate scholarship
+student in computer science and electronic engi-
+neering at La Trobe University Australia. His
+interests include big data analytics, data com-
+pression, audio processing, and programming
+language design.
+Zhen He received the undergraduate and PhD
+degrees in computer science from the Australian
+National University. He is an associate professor
+in the Department of Computer Science, La
+Trobe University Australia. His research interests
+include big data analytics, moving object data-
+bases, relational database optimization, and
+parallel databases.
+" For more information on this or any other computing topic,
+please visit our Digital Library at www.computer.org/publications/dlib.
+NIBALI AND HE: TRAJIC: AN EFFECTIVE COMPRESSION SYSTEM FOR TRAJECTORY DATA 3151
+Authorized licensed use limited to: CHONGQING UNIVERSITY. Downloaded on June 26,2026 at 12:40:23 UTC from IEEE Xplore.  Restrictions apply. 

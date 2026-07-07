@@ -1,0 +1,2170 @@
+1 23
+The VLDB Journal
+The International Journal on Very Large
+Data Bases
+ 
+ISSN 1066-8888
+Volume 28
+Number 6
+ 
+The VLDB Journal (2019) 28:897-921
+DOI 10.1007/s00778-019-00575-8
+One-pass trajectory simplification using the
+synchronous Euclidean distance
+Xuelian Lin, Jiahao Jiang, Shuai Ma,
+Yimeng Zuo & Chunming Hu
+
+
+1 23
+Your article is protected by copyright and
+all rights are held exclusively by Springer-
+Verlag GmbH Germany, part of Springer
+Nature. This e-offprint is for personal use only
+and shall not be self-archived in electronic
+repositories. If you wish to self-archive your
+article, please use the accepted manuscript
+version for posting on your own website. You
+may further deposit the accepted manuscript
+version in any repository, provided it is only
+made publicly available 12 months after
+official publication or later and provided
+acknowledgement is given to the original
+source of publication and a link is inserted
+to the published article on Springer's
+website. The link must be accompanied by
+the following text: "The final publication is
+available at link.springer.com”.
+
+The VLDB Journal (2019) 28:897–921
+https://doi.org/10.1007/s00778-019-00575-8
+REGULAR PAPER
+One-pass trajectory simpliﬁcation using the synchronous Euclidean
+distance
+Xuelian Lin 1 · Jiahao Jiang 1 · Shuai Ma 1 · Yimeng Zuo 1 · Chunming Hu 1
+Received: 9 January 2018 / Revised: 21 August 2019 / Accepted: 21 September 2019 / Published online: 4 October 2019
+© Springer-Verlag GmbH Germany, part of Springer Nature 2019
+Abstract
+V arious mobile devices have been used to collect, store and transmit tremendous trajectory data, and it is known that raw
+trajectory data seriously wastes the storage, network bandwidth and computing resource. To attack this issue, one-pass line
+simpliﬁcation ( LS) algorithms have been developed, by compressing data points in a trajectory to a set of continuous line
+segments. However, these algorithms adopt the perpendicular Euclidean distance , and none of them uses the synchronous
+Euclidean distance (SED), and cannot support spatiotemporal queries. To do this, we develop two one-pass error bounded
+trajectory simpliﬁcation algorithms ( CISED-S and CISED-W)u s i n gSED, based on a novel spatiotemporal cone intersection
+technique. Using four real-life trajectory datasets, we experimentally show that our approaches are both efﬁcient and effective.
+In terms of running time, algorithms CISED-S and CISED-W are on average 3 times faster than SQUISH-E (the fastest existing
+LS algorithm using SED). In terms of compression ratios, CISED-S is close to and CISED-W is on average 19 .6% better than
+DPSED (the existing sub-optimal LS algorithm using SED and having the best compression ratios), and they are 21 .1% and
+42.4% better than SQUISH-E on average, respectively.
+Keywords Trajectory simpliﬁcation · Synchronous Euclidean distance · One-pass line simpliﬁcation
+1 Introduction
+V arious mobile devices, such as smart-phones, on-board
+diagnostics, personal navigation devices and wearable smart
+devices, use their sensors to collect massive trajectory data of
+moving objects at a certain sampling rate ( e.g., a data point
+every 5 s), which is then transmitted to cloud servers for
+various applications such as location based services and tra-
+jectory mining. Transmitting and storing raw trajectory data
+consumes too much network bandwidth and storage capac-
+B Shuai Ma
+mashuai@buaa.edu.cn
+B Chunming Hu
+hucm@buaa.edu.cn
+Xuelian Lin
+linxl@buaa.edu.cn
+Jiahao Jiang
+jiangjh@buaa.edu.cn
+Yimeng Zuo
+zuoym@buaa.edu.cn
+1 Beijing Advanced Innovation Center for Big Data and Brain
+Computing (BDBC), Beihang University, Beijing, China
+ity [1,3,14–16,19,22–24,28,35]. These issues are commonly
+resolved or greatly alleviated by trajectory compression
+techniques [ 1,3,4,6,9,11,14–17,19,23,24,28], among which
+the piecewise line simpliﬁcation technique is widely used
+[1,3,4,6,14–16,19,23], due to its distinct advantages: (a) sim-
+ple and easy to implement, (b) no need of extra knowledge
+and suitable for freely moving objects and (c) bounded errors
+with good compression ratios [ 14,28].
+Originally, line simpliﬁcation ( LS) algorithms adopt the
+perpendicular Euclidean distance (PED) as a metric to com-
+pute the errors. Suppose that a sub-trajectory [P
+s, ...,Pe] is
+represented by a line segment −−→Ps Pe produced by an error
+bounded LS algorithm using PED. Then for any point P ∈
+{Ps, ...,Pe}, its perpendicular Euclidean distance to the line
+segment−−→Ps Pe is the shortest distance fromP to−−→Ps Pe. Indeed,
+line segment−−→Ps Pe represents all points that fall into an effec-
+tive zone consisting of a rectangle and two half-circles, such
+that each point in the zone has a PED to −−→Ps Pe not more than
+a predeﬁned error bound ϵ, as shown in Fig. 1a. A typical
+issue of using PED is that the exact location of a point is hard
+to tell when the zone is large (we just know it is located in
+the zone). That leads to that the answer to a spatiotemporal
+query “ the position P of a moving object at time t [1]” on
+123
+Author's personal copy
+
+898 X. Lin et al.
+Fig. 1 A sub-trajectory [Ps,..., Pe] is simpliﬁed using PED and SED,
+respectively. A spatiotemporal query “ the position P of the moving
+object at time t ” on the simpliﬁed trajectory returns a point a in a large
+zone consisting of a rectangle and two half-circles, or b inside a small
+circle
+the compressed trajectories is not bounded. That is, there is
+no way to ﬁnd an approximate point P′of P at t such that
+their distance is bounded within ϵ. This shows that trajectory
+simpliﬁcation using PED is not suitable for spatiotemporal
+queries that are necessary for location based services.
+The synchronous Euclidean distance(SED) was then intro-
+duced for trajectory compression [ 1,4,19,23,29] to address
+the above issue for supporting bounded spatiotemporal
+queries. The use of SED highly depends on a notion named
+synchronized point [1,19] that could be computed conve-
+niently. As shown in Fig. 1b, the synchronized point P
+′of a
+point P at time t w.r .t.a line segment −−→Ps Pe is the expected
+position of the moving object on −−→Ps Pe at time t with the
+assumption that the object moves along a straight line from
+points P
+s to Pe at a uniform speed [1], i.e., the average speed
+from points Ps to Pe.T h e SED of point P to line segment−−→Ps Pe is the Euclidean distance between P and its synchro-
+nized point P ′w.r .t.the line segment −−→Ps Pe. When an error
+bounded LS algorithm using SED is adopted, it requires that
+a point P is located within a circle with its synchronized
+point P′as its center and ϵas its radius, as shown in Fig. 1b.
+Hence, the above spatiotemporal query over the trajectories
+compressed by SED can return the synchronized point P′as
+the approximate point of P at time t such that their distance
+is bounded within ϵ. Note that the SED of a point to a line
+segment is equal to or less than thePED of the point to the line
+segment as illustrated in Fig. 1b, and, hence, LS algorithms
+using SED typically generate more line segments.
+The problem of ﬁnding the minimal number of line seg-
+ments to represent the original polygonal lines w.r .t.an error
+bound ϵ is known as the “min-#” problem [ 2,13], and there
+exists an optimal LS algorithm, in terms of compression,
+using SED that runs in O(n3) [13] (originally designed for
+PED), where n is the number of the original points. Due
+to this high time complexity, sub-optimal LS algorithms
+using SED have been developed for trajectory compression,
+including batch algorithms ( e.g., Douglas–Peucker-based
+algorithm DPSED [19]) and online algorithms (e.g., SQUISH-
+E [23]). However, these methods still have high time and/or
+space complexities, which hinders their utilities in resource-
+constrained devices.
+Observe that one-pass LS algorithms using PED [7,14,36,
+40,42] have been developed, and they are more efﬁcient for
+resource-constrained devices. The key idea to achieve one-
+pass processing is by local distance checking for a single data
+point in constant time, e.g., the sector intersection mecha-
+nism used in [ 7,36,40,42] and the ﬁtting function approach
+used in our preview work [ 14]. Unfortunately, these tech-
+niques are designed speciﬁcally for PED, and work in a
+2D space, not in a spatiotemporal 3D space that SED needs.
+Hence, they can hardly be applied for SED.
+Indeed, it is even more challenging to design one-pass LS
+algorithms using SED than using PED.A s SED introduces the
+temporal information besides the spatial information, a new
+local distance checking method in a spatiotemporal 3D space
+is needed. To our knowledge, no one-passLS algorithms using
+SED have been developed in the community yet.
+Contributions. To this end, we propose two fast one-pass
+error bounded LS algorithms using SED for compressing tra-
+jectories with good compression ratios.
+(1) We ﬁrst substantially extend the one-pass local distance
+checking approach from a 2D space to a spatiotemporal 3D
+space and develop a novel local synchronous distance check-
+ing approach,
+i.e., spatiotemporal Cone Intersection using the
+Synchronous E uclidean D istance (CISED), such that each
+data point in a trajectory is checked in O(1) time during the
+entire process of trajectory simpliﬁcation. It is the ﬁrst local
+distance checking method for trajectory compression using
+SED, and it is also the key to develop one-pass trajectory
+simpliﬁcation algorithms using SED.
+(2) We develop a method that ﬁnds the approximate common
+intersection of n circles in a linear time and a constant space,
+whose key idea is to approximate circles by a special class
+of regular polygons and compute their intersection with a
+fast regular polygon intersection algorithm. This also has
+a potential usage as a basic approximate function though
+we develop the method for the local synchronous distance
+checking.
+(3) We design two one-pass trajectory simpliﬁcation algo-
+rithms CISED-S and CISED-W, achieving O(n) time com-
+plexity and O(1) space complexity, based on our local
+synchronous distance checking technique. AlgorithmCISED-
+S belongs to strong simpliﬁcation that only has original points
+in its outputs, while algorithmCISED-W belongs to weak sim-
+pliﬁcation that allows interpolated data points in its outputs.
+(4) Using four real-life trajectory datasets ( ServiceCar,
+GeoLife, Mopsi, PrivateCar), we ﬁnally conduct an exten-
+123
+Author's personal copy
+
+One-pass trajectory simpliﬁcation using the synchronous Euclidean distance 899
+sive experimental study, by comparing our methods CISED-S
+and CISED-W with the compression optimal LS algorithm
+using SED(C-Optimal in short) [13], batch algorithm DPSED
+[19] (the existing sub-optimalLS algorithm using SED having
+the best compression ratios) and online algorithm SQUISH-E
+[23] (the fastest existing LS algorithm using SED). For run-
+ning time, algorithms CISED-S and CISED-W are on average
+15.0, 3.2 and 14345 .0 times faster than DPSED, SQUISH-E
+and C-Optimal on the test datasets, respectively. For com-
+pression ratios, algorithm CISED-S is better than SQUISH-E
+and close to DPSED. The output sizes of CISED-S a r eo na v e r -
+age 74.4%, 110.4% and 137 .9% of SQUISH-E, DPSED and
+C-Optimal on the test datasets, respectively. Moreover, algo-
+rithm CISED-W is on average 54 .9% and 81 .6% better than
+SQUISH-E and DPSED on the test datasets, respectively.
+It is worth pointing out that trajectory data is collected by
+mobile devices from GPS sensors, and these devices have
+range errors, which leads to data quality issues of trajectory
+data [ 27,44]. However, the problem is beyond the scope of
+this study, and we focus on lossy simpliﬁcation of trajectory
+data only.
+Organization. The remainder of the article is organized as
+follows. Section 2 introduces the basic concepts and tech-
+niques. Section 3 presents our local synchronous distance
+checking method. Section 4 presents our one-pass trajectory
+simpliﬁcation algorithms. Section 5 reports the experimental
+results, followed by related work in Sect. 6 and conclusion
+in Sect. 7. All proofs are provided in the Appendix.
+2 Preliminaries
+In this section, we ﬁrst introduce basic concepts for piece-
+wise line-based trajectory compression. We then describe the
+compression optimal LS algorithm and thesector intersection
+mechanism, and show how this mechanism can be used to
+speed up the LS algorithms using PED and why it cannot work
+with SED. Finally, we illustrate a convex polygon intersection
+algorithm, which serves as one of the fundamental compo-
+nents of our local synchronous distance checking method.
+For convenience, notations used are summarized in Table 1.
+2.1 Basic notations
+Points (P). A data point is deﬁned as a triple P(x, y, t),
+which represents that a moving object is located at longitude
+x and latitude y at time t. Note that data points can be viewed
+as points in the x-y-t 3D Euclidean space.
+Trajectories ( ...
+T ). A trajectory ...
+T [P0,..., Pn] is a sequence
+of data points in a monotonically increasing order of their
+associated time values ( i.e., P i.t < Pj.t for any 0 ≤ i <
+j ≤ n). Intuitively, a trajectory is the path (or track) that a
+moving object follows through space as a function of time
+[20].
+Directed line segments (L). A directed line segment (or line
+segment for simplicity) L is deﬁned as −−→Ps Pe, which repre-
+sents the closed line segment that connects the start point Ps
+and the end point Pe. Note that here Ps or Pe may not be a
+point in a trajectory ...
+T .
+For the projection of a directed line segment L on an x-
+y 2D space, where x and y are the longitude and latitude,
+respectively, we also use|L| and L.θ ∈[ 0, 2π) to denote the
+length of L in the x-y 2D space, and its angle with the x-axis
+of the coordinate system (x, y). That is, the projection of a
+directed line segment L = −−→Ps Pe on an x-y 2D space is treated
+as a triple (Ps,|L|, L.θ).
+Piecewise line representation (T ). A piecewise line rep-
+resentation T [L0,..., Lm] (0 < m ≤ n) of a trajectory...
+T [P0,..., Pn] is a sequence of continuous directed line seg-
+ments Li = −−−→Psi Pei (i ∈[ 0, m])o f ...
+T such that L0.Ps0 = P0,
+Lm.Pem = Pn and Li.Pei = Li+1.Psi+1 for all i ∈[ 0, m − 1].
+Note that each directed line segment in T essentially repre-
+sents a continuous sequence of data points in ...
+T .
+Perpendicular Euclidean Distance (PED). Given a data
+point P and a directed line segment L = −−→Ps Pe, the perpen-
+dicular Euclidean distance (or simply perpendicular distance)
+ped(P, L) of point P to line segment L is min{|−→PQ |} for
+any point Q on −−→Ps Pe.
+Synchronized points [19]. Given a sub-trajectory ...
+T s[Ps ,
+..., Pe], the synchronized point P′ of a data point P ∈...
+T s , w.r .t.line segment −−→Ps Pe is deﬁned as follows: (1) P′.x =
+Ps.x +w·(Pe.x − Ps.x),( 2 )P′.y = Ps.y +w·(Pe.y − Ps.y)
+and (3) P′.t = P.t, where w = P.t−Ps.t
+Pe.t−Ps.t .
+Synchronized points are essentially virtual points with the
+assumption that an object moved along a straight line fromPs
+to Pe with a uniform speed, i.e., the average speed |−−→Ps Pe|
+Pe.t−Ps.t
+between points Ps and Pe [1]. Then, the synchronized point
+P′of a point P w.r .t.the line segment −−→Ps Pe is the expected
+position of the moving object on −−→Ps Pe at time P.t, obtained
+by a linear interpolation [ 1]. More speciﬁcally, a synchro-
+nized point P′
+i of Pi (s ≤ i < e) is a point on −−→Ps Pe satisfying
+|−−→Ps P′
+i |= Pi .t−Ps.t
+Pe.t−Ps.t ·| −−→Ps Pe|, which means that the object
+moves from Ps to Pe at an average speed |−−→Ps Pe|
+Pe.t−Ps.t , and its
+position at time Pi.t is the point P′
+i on −−→Ps Pe having a distance
+of Pi .t−Ps.t
+Pe.t−Ps.t ·| −−→Ps Pe| to Ps [1,4,19,41].
+Synchronous Euclidean Distance (SED)[ 19]. Given a
+data point P and a directed line segment L = −−→Ps Pe,t h e
+synchronous Euclidean distance (or simply synchronous dis-
+tance) sed(P, L) of P to L is |−−→PP ′| that is the Euclidean
+distance from P to its synchronized point P′w.r .t.L.
+123
+Author's personal copy
+
+900 X. Lin et al.
+Fig. 2 A trajectory ...
+T [P0,..., P10] with eleven points is represented
+by two (left) and four (right) continuous line segments (solid blue),
+compressed by the Douglas–Peucker algorithm [ 6]u s i n gPED and SED,
+respectively. The Douglas–Peucker algorithm ﬁrstly creates line seg-
+ment−−−→P
+0 P10; then, it calculates the distance of each point in the trajectory
+to −−−→P0 P10. It ﬁnds that point P4 has the maximum distance to−−−→P0 P10,a n d
+is greater than the user-deﬁned threshold ϵ. Then, it goes to compress
+sub-trajectories [P0,..., P4] and [P4,..., P10], separately
+Table 1 Summary of notations Notations Semantics
+P A data point
+...
+T A trajectory ...
+T is a sequence of data points
+T A piecewise line representation of a trajectory ...
+T
+L A directed line segment
+−−→Ps Pe A directed line segment with the start point Ps and the end point Pe
+|L| The length of L in the x-y 2D space
+ped(P, L) The perpendicular Euclidean distance of point P to line segment L
+sed(P, L) The synchronous Euclidean distance of point P to line segment L
+ϵ The error bound
+S A sector
+−→A × −→B The cross product of (vectors) −→A and −→B
+H(L) The open half-plane to the left of L
+R A convex polygon
+R∗ The intersection of convex polygons
+m The maximum number of edges of a polygon
+E j A group of edges labeled with j
+g(e) The label of an edge e of polygons
+O A synchronous circle
+C A spatiotemporal cone
+Oc A cone projection circle
+/bigsqcap Intersection of geometries
+G The reachability graph of a trajectory
+The use of PED brings better compression ratios, but the
+temporal information of data points is not available [ 19],
+which makes PED not suitable for spatiotemporal queries.
+In contrast, SED takes both spatial and temporal information
+of data points into consideration [ 19]. Hence, SED is more
+suitable for spatiotemporal queries.
+We illustrate these notations with examples.
+Example 1 Consider Fig. 2, in which
+(1) ...
+T [P0, ..., P10] is a trajectory having 11 data points,
+(2) the set of two continuous line segments {−−→P0 P4, −−−→P4 P10}
+(Left) and the set of four continuous line segments {−−→P0 P2,−−→P2 P4, −−→P4 P7, −−−→P7 P10} (Right) are two piecewise line repre-
+sentations of trajectory ...
+T ,
+(3) ped(P4,−−−→P0 P10) =| −−−→P4 P∗
+4 |, where P∗
+4 is the perpendicu-
+lar point of P4 w.r .t.line segment −−−→P0 P10,
+(4) P′
+4 is the synchronized point of P4 w.r .t.line segment
+−−−→P0 P10, satisfying |−−→P0 P′
+4|
+|−−−→P0 P10|
+= P4.t−P0.t
+P10.t−P0.t = 4−0
+10−0 = 2
+5 , and
+123
+Author's personal copy
+
+One-pass trajectory simpliﬁcation using the synchronous Euclidean distance 901
+(5) sed(P4,−−−→P0 P10) =| −−→P4 P′
+4|, sed(P2,−−→P0 P4) =| −−→P2 P′
+2| and
+sed(P7,−−−→P4 P10) =| −−→P7 P′
+7|, where points P′
+4, P′
+2 and P′
+7 are
+the synchronized points of P4, P2 and P7 w.r .t.line segments−−−→P0 P10, −−→P0 P4 and −−−→P4 P10, respectively. ⊓⊔
+Error bounded algorithms . Given a trajectory ...
+T and its
+compression algorithm A using SED (respectively, PED)
+that produces another trajectory
+...
+T ′, we say that algo-
+rithm A is error bounded by ϵ if for each point P in ...
+T ,
+there exist points Pj and Pj+1 in
+...
+T ′ such that Pj.t ≤
+P.t ≤ Pj+1.t and sed(P, L(Pj , Pj+1)) ≤ ϵ (respectively,
+ped(P, L(Pj , Pj+1)) ≤ ϵ).
+2.2 The compression optimal LS algorithm
+Given a trajectory ...
+T [P0,..., Pn] and an error bound ϵ,t h e
+compression optimal trajectory simpliﬁcation problem, as
+formulated by Imai and Iri in [13], can be solved in two steps:
+(1) construct a reachability graph G of ...
+T , and (2) search a
+shortest path from P
+0 to Pn in G.
+The reachability graph of a trajectory ...
+T [P0,..., Pn] w.r .t.
+a bound ϵis an unweighted graph G(V, E), where (1) V =
+{P0,..., Pn}, and (2) for any nodes Ps and Ps+k ∈ V (s ≥
+0, k > 0, s + k ≤ n), edge (Ps, Ps+k) ∈ E if and only if
+the distance of each point Ps+i (i ∈[ 0, k]) to line segment−−−−→Ps Ps+k is not greater than ϵ.
+Observe that in the reachability graph G, (1) a path from
+nodes P0 to Pn is a representation of trajectory ...
+T . The path
+also reveals the subset of points of ...
+T used in the approximate
+trajectory, (2) the path length corresponds to the number of
+line segments in the approximate trajectory, and (3) a shortest
+path is a compression optimal representation of trajectory ...
+T .
+Constructing the reachability graph G needs to check for
+all pairs of points P
+s and Ps+k whether the distances of all
+points Ps+i (0 < i < k) to the line segment −−−−→Ps Ps+k are
+less than ϵ. There are O(n2) pairs of points in the trajectory
+and checking the error of all points Ps+i to a line segment−−−−→Ps Ps+k takes O(n) time. Thus, the construction step takes
+O(n3) time. Finding shortest paths on unweighted graphs
+can be done in linear time. Hence, the brute-force algorithm
+takes O(n
+3) t i m ei nt o t a l .
+Though the brute-force algorithm was initially developed
+using PED, it can be used for SED. As pointed out in [ 2],
+the construction of the reachability graph G using PED can
+be implemented in O(n2) time using the sector intersection
+mechanism (see Sect. 2.3). However, the sector intersection
+mechanism cannot work with SED. Hence, the construction
+of the reachability graphG using SED remains in O(n3) time,
+and the brute-force algorithm using SED remains in O(n3)
+time.
+2.3 Sector intersection-based algorithms using PED
+The sector intersection (SI) algorithm [36,40] was developed
+for graphic and pattern recognition in the late 1970s, for the
+approximation of arbitrary planar curves by linear segments
+or ﬁnding a polygonal approximation of a set of input data
+points in a 2D Cartesian coordinate system. TheSleeve algo-
+rithm [ 42] in the cartographic discipline essentially applies
+the same idea as the SI algorithm. Further, [ 7] optimized
+algorithm SI by considering the distance between a poten-
+tial end point and the initial point of a line segment. It is
+worth pointing out that all these SI-based algorithms use the
+perpendicular Euclidean distance.
+Given a sequence of data points[P
+s, Ps+1,..., Ps+k] and
+an error bound ϵ,t h e SI-based algorithms process the input
+points one by one in order and produce a simpliﬁed polyline.
+Instead of using the distance thresholdϵdirectly, theSI-based
+algorithms convert the distance tolerance into a variable angle
+tolerance for testing the successive data points.
+For the start data point P
+s , any point Ps+i and |−−−−→Ps Ps+i| >
+ϵ(i ∈[ 1, k]), there are two directed lines−−−−→Ps Pu
+s+i and
+−−−−→
+Ps Pl
+s+i
+such that ped(Ps+i,−−−−→Ps Pu
+s+i) = ped(Ps+i,
+−−−−→
+Ps Pl
+s+i) = ϵand
+either (
+−−−−→
+Ps Pl
+s+i.θ < −−−−→Ps Pu
+s+i.θ and −−−−→Ps Pu
+s+i.θ −
+−−−−→
+Ps Pl
+s+i.θ <
+π )o r(
+−−−−→
+Ps Pl
+s+i.θ > −−−−→Ps Pu
+s+i.θ and −−−−→Ps Pu
+s+i.θ −
+−−−−→
+Ps Pl
+s+i.θ <
+−π) . Indeed, they form a sector S(Ps, Ps+i ,ϵ) that takes Ps
+as the center point and−−−−→Ps Pu
+s+i and
+−−−−→
+Ps Pl
+s+i as the border lines.
+Then, there exists a data point Q such that for any data point
+Ps+i (i ∈[ 1, ...k]), its perpendicular Euclidean distance to
+directed line −−→Ps Q is not greater than the error bound ϵ if
+and only if the k sectors S(Ps, Ps+i,ϵ) (i ∈[ 1, k]) share
+common data points other than Ps , i.e., /bigsqcapk
+i=1S(Ps, Ps+i,ϵ)
+̸={ Ps} [36,40,42].
+The point Q may not belong to {Ps, Ps+1, ..., Ps+k}.
+However, if Ps+i (1 ≤ i ≤ k) is chosen as Q, then for any
+data point Ps+ j ( j ∈[ 1, ...i]), its perpendicular Euclidean
+distance to line segment −−−−→Ps Ps+i is not greater than the error
+bound ϵ if and only if /bigsqcapi
+j=1S(Ps, Ps+ j ,ϵ/2) ̸={ Ps},a s
+pointed out in [ 42].
+That is, these SI -based algorithms can be easily adopted
+for trajectory compression using PEDalthough they have
+been overlooked by existing trajectory simpliﬁcation studies.
+The SI-based algorithms run in O(n) time and O(1) space
+and are one-pass algorithms.
+We next illustrate how theSI-based algorithms can be used
+for trajectory compression with an example.
+Example 2 Consider Fig. 3.A n SI-based simpliﬁcation algo-
+rithm takes as input a trajectory ...
+T [P0,..., P10], and returns
+a simpliﬁed polyline consisting of two line segments −−→P0 P4
+and −−−→P4 P10. Initially, point P0 is the start point.
+123
+Author's personal copy
+
+902 X. Lin et al.
+Fig. 3 Trajectory ...
+T [P0,..., P10] in Fig. 2 is compressed into two line segments by the sector intersection algorithm [ 36,40]. Each circle in the
+ﬁgure has a radius of ϵ/2, which is used to deﬁne the sector
+(1) Point P1 is ﬁrstly read, and the sector S(P0, P1,ϵ/2) of
+P1 is created as shown in Fig. 3(1).
+(2) Then, P2 is read, and the sector S(P0, P2,ϵ/2) is cre-
+ated for P2. The intersection of sectors S(P0, P1,ϵ/2) and
+S(P0, P2,ϵ/2) contains data points other than P0, which has
+an up border line−−−→P0 Pu
+2 and a low border line
+−−→
+P0 Pl
+1,a ss h o w n
+in Fig. 3(2).
+Similarly, points P3 and P4 are processed, as shown in
+Fig. 3(3), (4), respectively.
+(3) When point P5 is read, line segment−−→P0 P4 is produced, and
+point P4 becomes the start point, as /bigsqcap4
+i=1S(P0, Ps+i ,ϵ/2)
+̸={ P0} and /bigsqcap5
+i=1S(P0, Ps+i,ϵ/2) ={ P0} as shown in
+Fig. 3(5).
+(4) Points P5,..., P10 are processed similarly one by one in
+order, and ﬁnally, the algorithm outputs another line segment−−−→P4 P10 as shown in Fig. 3(5). ⊓⊔
+However, if we useSED instead of PED, then “the k sectors
+S(Ps, Ps+i,ϵ) (i ∈[ 1, k]) sharing common data points other
+than Ps ” cannot ensure “there exists a data point Q such
+that for any data point Ps+i (i ∈[ 1, ...k]), its synchronous
+Euclidean distance to directed line Ps Q is not greater than
+the error bound ϵ.” Hence, the SI mechanism is PED speciﬁc,
+and not applicable for SED.
+2.4 Intersection computation of convex polygons
+We also employ and revise a convex polygon intersection
+algorithm developed in [ 25], whose basic idea is straight-
+forward. Assume w.l.o.g. that the edges of polygons R1 and
+R2 are oriented counterclockwise, and −→A = (PsA , PeA ) and−→B = (PsB , PeB ) are two (directed) edges on R2 and R1,
+respectively.
+The algorithm has −→A and −→B “chasing” one another, i.e.,
+moves −→A on R2 and −→B on R1 counterclockwise step by
+step under certain rules, so that they meet at every crossing
+of R1 and R2. The rules, called advance rules, are carefully
+designed depending on geometric conditions of −→A and −→B .
+Let −→A ×−→B be the cross product of (vectors) −→A and −→B , and
+Fig. 4 A running example of convex polygon intersection
+H(−→A ) be the open half-plane to the left of −→A , the rules are
+as follows:
+Rule (1):I f −→A × −→B < 0 and PeA /∈ H(−→B ),o r −→A × −→B ≥ 0
+and PeB ∈ H(−→A ), then −→A is advanced a step.
+For example, in Fig. 4(1), (2), −→A moves forward a step as−→A × −→B > 0 and PeB ∈ H(−→A ).
+Rule (2):I f −→A × −→B ≥ 0 and PeB /∈ H(−→A ),o r −→A × −→B < 0
+and PeA ∈ H(−→B ), then −→B is advanced a step.
+For example, in Fig. 4(6), (7), −→B moves forward a step as−→A × −→B < 0 and PeA ∈ H(−→B ).
+Algorithm CPolyInter. The complete algorithm is shown in
+Fig. 5. Given two convex polygons R1 and R2, algorithm
+CPolyInter ﬁrst arbitrarily sets directed edge −→A on R2 and
+directed edge −→B on R1, respectively (line 1). It then checks
+the intersection of edges −→A and −→B .I f −→A intersects −→B (line
+3), then the algorithm checks for some special termination
+conditions (e.g., if −→A and −→B are overlapped and, at the same
+time, polygons R1 and R2 are on the opposite sides of the
+overlapped edges, then the process is terminated) (line 4),
+and records the inner edge, which is a boundary segment of
+123
+Author's personal copy
+
+One-pass trajectory simpliﬁcation using the synchronous Euclidean distance 903
+Fig. 5 Algorithm for convex polygon intersection [ 25]
+the intersection polygon (line 5). After that, the algorithm
+moves on −→A or −→B one step under the advance rules (lines
+6–11). The above processes repeated, until both −→A and −→B
+completely cycle their polygons (line 12). Next, the algorithm
+handles three special cases of the polygons R1 and R2, i.e.,
+R1 is inside of R2, R2 is inside of R1, and R1
+/bigsqcapR2 =∅
+(line 13). At last, it returns the intersection polygon (line 14).
+Example 3 Figure 4 shows a running example of the convex
+polygon intersection algorithm CPolyInter.
+(1) Initially, directed edges −→A and −→B are on polygons R2
+and R1, respectively, such that −→A /bigsqcap−→B ={ P1}, i.e., −→A and−→B intersect on point P1, as shown in Fig. 4(1).
+(2) Then, because −→A × −→B > 0 and PeB ∈ H(−→A ),b y
+the advance rule (1), edge −→A moves on a step and makes−→A /bigsqcap−→B =∅ as shown in Fig. 4(2). After 7 steps of mov-
+ing of edge −→A or −→B , each by an advance rule, −→A and −→B
+intersect on P2, as shown in Fig. 4(6).
+(3) Next, because −→A × −→B < 0 and PeA ∈ H(−→B ),b y
+the advance rule (2), edge −→B moves on a step, and makes−→A /bigsqcap−→B =∅ , as shown in Fig. 4(7).
+(4) After 6 steps of moving of edge −→B or −→A one by one,
+both edges −→A and −→B have ﬁnished their cycles as shown in
+Fig. 4(8).
+(5) The algorithm ﬁnally returns the intersection polygon as
+shown in Fig. 4(9). ⊓⊔
+Algorithm CPolyInter has a time complexity of O(|R1|+
+|R2|), where |R| is the number of edges of polygon R.I ti s
+also worth pointing out that |R1
+/bigsqcapR2|≤ (|R1|+| R2|).
+3 Local synchronous distance checking
+In this section, we develop a local synchronous distance
+checking approach, laying down the key for the one-pass tra-
+jectory simpliﬁcation algorithms using SED (Sect. 4), such
+that each point in a trajectory is checked only once in O(1)
+time during the entire process of trajectory simpliﬁcation.
+The local synchronous distance checking method is based
+on a new concept of spatiotemporal cones that converts the
+SED distance tolerance into the intersection of spatiotemporal
+cones for testing the successive data points. More speciﬁcally,
+we ﬁrst substantially extend the sectors in Sect. 2.3 from a 2D
+space to a spatiotemporal 3D space, which leads tospatiotem-
+poral cones. Then, we prove that the SED distance checking
+can be achieved by the intersection of spatiotemporal cones.
+Finally, we simplify the spatiotemporal cone intersection into
+the circle intersection and approximate circles with a special
+class of (ﬁxed rotation and edge number) polygons.
+We consider a sub-trajectory ...
+T
+s[Ps,..., Ps+k],a ne r r o r
+bound ϵ, and a 3D Cartesian coordinate system whose origin,
+x-axis, y-axis and t-axis are Ps , longitude, latitude and time,
+respectively.
+3.1 Spatiotemporal cone intersection
+We ﬁrst present the spatiotemporal cone intersection method
+in a 3D Cartesian coordinate system.
+Synchronous circles (O). The synchronous circle of a data
+point Ps+i (1 ≤ i ≤ k)i n ...
+T s w.r .t.an error bound ϵ, denoted
+as O(Ps+i,ϵ),o r Os+i in short, is a circle on the plane P.t −
+Ps+i.t = 0 such that Ps+i is its center and ϵis its radius.
+Spatiotemporal cones (C). Given a start point Ps of
+...
+Ts and
+an error bound ϵ, the spatiotemporal cone (or simply cone)
+of a data point Ps+i (1 ≤ i ≤ k)i n
+...
+Ts w.r .t. Ps and ϵ, denoted
+as C(Ps, O(Ps+i,ϵ) ),o r Cs+i in short, is an oblique circular
+cone such that point Ps is its apex and the synchronous circle
+O(Ps+i,ϵ) of point Ps+i is its base.
+Example 4 (1) Figure 6 shows two synchronous circles,
+O(Ps+i,ϵ) of point Ps+i and O(Ps+k,ϵ) of point Ps+k .I ti s
+easy to see that for any point in the area of a circleO(Ps+i ,ϵ),
+its distance to Ps+i is not greater than ϵ.
+(2) Figure 6 also illustrates two example spatiotemporal
+cones: C(Ps, O(Ps+i,ϵ) ) (purple) and C(Ps, O(Ps+k,ϵ) )
+(red), with the same apex Ps and error bound ϵ. ⊓⊔
+Indeed, the SED distance tolerance can be checked by
+ﬁnding the common intersection of spatiotemporal cones,
+as shown below.
+Proposition 1 Given a sub-trajectory [P
+s, ...,Ps+k] and an
+error bound ϵ, there exists a point Q such that Q .t = Ps+k.t
+and sed (Ps+i,−−→Ps Q) ≤ ϵ for each i ∈[ 1, k] if and only if/bigsqcapk
+i=1C(Ps, O(Ps+i,ϵ) )̸={ Ps}.
+123
+Author's personal copy
+
+904 X. Lin et al.
+Fig. 6 Examples of spatiotemporal cones in a 3D Cartesian coordinate
+system, where (1) Ps , Ps+i and Ps+k are three points, (2)Os+i and Os+k
+are two synchronous circles, (3) Cs+i and Cs+k are two spatiotemporal
+cones, (4) Q is a point in synchronous circle Os+k ,a n d( 5 )P′
+s+i is the
+intersection point of line −−→Ps Q and synchronous circle Os+i
+By Proposition 1, we now have a spatiotemporal cone
+intersection method in a 3D Cartesian coordinate system,
+which signiﬁcantly extends the sector intersection method
+[36,40,42] from a 2D space to a spatiotemporal 3D space.
+3.2 Circle intersection
+For spatiotemporal cones with the same apex Ps , we then
+show that the checking of their intersection can be computed
+by a much simpler way, i.e., the checking of intersection of
+cone projection circles on a plane.
+Cone projection circles . The projection of a cone
+C(P
+s, O(Ps+i,ϵ) )on a plane P.t − tc = 0( tc > Ps.t)
+is a circle Oc(Pc
+s+i, r c
+s+i),o r Ocs+i in short, such that (1)
+Pc
+s+i.x = Ps.x + w · (Ps+i.x − Ps.x),( 2 ) Pc
+s+i.y = Ps.y +
+w · (Ps+i.y − Ps.y),( 3 ) Pc
+s+i.t = tc, and (4) r c
+s+i = w · ϵ,
+where w = tc−Ps.t
+Ps+i .t−Ps.t .
+Recall that the base of a cone C(Ps, O(Ps+i,ϵ) )is a circle
+on plane P.t − Ps+i.t = 0, and plane P.t − tc = 0 is parallel
+to plane P.t − Ps+i.t = 0. These ensure that the projection
+of a cone on plane P.t − tc = 0i sac i r c l e .
+Example 5 In Fig. 7, the green dashed circles Oc(Pc
+s+i, r c
+s+i)
+and Oc(Pc
+s+k, r c
+s+k) on plane “ P.t − tc = 0” are the projec-
+tion circles of conesC(Ps, O(Ps+i ,ϵ) )and C(Ps, O(Ps+k,ϵ) )
+on the plane. ⊓⊔
+Proposition 2 Given a sub-trajectory [Ps,..., Ps+k],a n
+error bound ϵ, and any t c > Ps.t, there exists a point Q
+such that Q .t = Ps+k.t and sed (Ps+i ,−−→Ps Q) ≤ ϵ for all
+points P s+i (i ∈[ 1, k]) if and only if /bigsqcapk
+i=1Oc(Pc
+s+i, r c
+s+i)
+̸=∅ .
+Fig. 7 Cone projection circles
+Proposition 2 tells us that the intersection checking of
+spatiotemporal cones can be reduced to simply check the
+intersection of cone projection circles on a plane.
+3.3 Inscribed regular polygon intersection
+Finding the common intersection of n circles on a plane has
+a time complexity of O(n log n) [34], which cannot be used
+for designing one-pass trajectory simpliﬁcation algorithms
+using SED. Intuitively, we can approximate a circle with its
+m-edges inscribed polygon whose intersection can be com-
+puted much faster. However, the intersection of two general
+m-edges polygons may produce a polygon with more than
+m edges; thus, the time complexity of ﬁnding the common
+intersection of n polygons on a plane is not linear. To solve
+this problem, we approximate a circle with a ﬁxed rotation
+and m-edges inscribed regular polygon.
+Inscribed regular polygons (R). Given a cone projection
+circle Oc(P, r), its inscribed m-edges regular polygon is
+denoted as R(V, E), where (1) V ={ v1,...,v m} is the
+set of vertexes that are deﬁned by a polar coordinate system,
+whose origin is the center P of O
+c, as follows:
+v j = (r, ( j − 1)
+m 2π), j ∈[ 1, m],
+and (2) E ={ −−→vmv1} ⋃ {−−−−→v jv j+1 | j ∈[ 1, m − 1]} is the set of
+edges that are labeled with the subscripts of their start points.
+Figure 8(1) illustrates the inscribed regular octagon ( m = 8)
+of a cone projection circle O
+c(P, r).
+Let Rs+i (1 ≤ i ≤ k) be the inscribed regular polygon of
+the cone projection circle Oc(Pc
+s+i, r c
+s+i), R∗
+l (1 ≤ l ≤ k)
+be the intersection /bigsqcapl
+i=1 Rs+i , and E j (1 ≤ j ≤ m)b et h e
+group of k edges labeled with j in all Rs+i (i ∈[ 1, k]).
+It is easy to verify that all edges in the same edge group
+E j (1 ≤ j ≤ m) are in parallel (or overlapping) with each
+other by the above deﬁnition of inscribed regular polygons,
+as illustrated in Fig. 8(2).
+123
+Author's personal copy
+
+One-pass trajectory simpliﬁcation using the synchronous Euclidean distance 905
+Fig. 8 Regular octagons and their intersections ( m = 8)
+The intersection of inscribed regular polygons holds a nice
+property, as shown below.
+Proposition 3 The intersection R∗
+l
+/bigsqcapRs+l+1 (1 ≤ l < k)
+has at most m edges, i.e., at most one edge from each edge
+group.
+Figure 8(2) shows the intersection polygon (red lines) of
+R1, R2 and R3 with 7 edges, and here edges labeled with 7
+have no contributions to the resulting intersection polygon.
+Based on Proposition 3, we also have the following.
+Proposition 4 The intersection of R∗
+l and Rs+l+1 (1 ≤ l <
+k) can be done in O (1) time.
+By Proposition 4, we have a local synchronous distance
+checking method.
+3.4 Speedup inscribed regular polygon intersection
+Recall that the intersection of inscribed regular polygons
+can be computed by the convex polygon intersection algo-
+rithm CPolyInter [25]i nF i g . 5. However, observe that
+algorithm CPolyInter is for general convex polygons, while
+the inscribed regular polygons R
+s+i (i ∈[ 1, k]) of the cone
+projection circles are constructed in a uniﬁed way, i.e., ﬁxed
+rotation and edge number, which allows us to develop a faster
+method to speed up the computation of their intersection.
+We next explain the key idea for speeding up the compu-
+tation. Observe that when the edges −→A = (PsA , PeA ) and−→B = (PsB , PeB ) on polygons R2 and R1 (both R2 and
+R1 can be either inscribed regular polygons or the common
+intersection of inscribed regular polygons) are “chasing” one
+another as the way the convex polygon intersection algorithm
+CPolyInter does, every segment in the two polygons being
+intersected has to originate from one of the m edges of the
+regular polygons, and consider the geometric similarity of
+the regular polygons, we may advance edge −→A or −→B mul-
+tiple steps at a time, instead of a single step at a time as the
+convex polygon intersection algorithm CPolyInter does. For
+example, in Fig. 4(1)–(5), edge −→A successively moves four
+steps, each under the advance rule (1) “( −→A × −→B < 0 and
+P
+eA /∈ H(−→B ))o r( −→A × −→B ≥ 0 and PeB ∈ H(−→A ))” of
+algorithm CPolyInter. Alternatively, we can directly move
+A from Fig. 4(1) to (5), by reducing four steps to one step
+only. To achieve this, we ﬁrst develop two extra advance
+rules (Propositions 5 and 6 ) for the intersection of inscribed
+regular polygons.
+Proposition 5 If either (−→A /bigsqcap−→B ̸=∅ and −→A ×−→B < 0 and
+PeA /∈ H(−→B )) or (−→A /bigsqcap−→B ̸=∅ and −→A × −→B ≥ 0 and
+PeB ∈ H(−→A )) holds, then −→A advances s steps such that
+s =
+⎧
+⎪⎪
+⎨
+⎪⎪
+⎩
+2 × (g(−→B ) − g(−→A )) if g (−→B )> g(−→A )
+1 if g (−→A ) = g(−→B )
+2 × (m + g(−→B ) − g(−→A )) if g (−→B )< g(−→A ),
+in which g(e) denotes the label of edge e.
+We next explain how the edge −→A advances based on
+Proposition
+5. Indeed, −→A moves from its original position
+to its symmetric edge on Rs+l+1 w.r .t.the symmetric line
+that is perpendicular to −→B on R∗
+l . For example, in Fig. 9(1),
+there is −→A /bigsqcap−→B ̸=∅ and −→A × −→B ≥ 0 and PeB ∈ H(−→A );
+hence, −→A moves on. As g(−→B ) = 3 > 1 = g(−→A ), −→A moves
+forward 2 × (g(−→B ) − g(−→A )) =2 × (3 − 1) = 4 steps. Here,
+the label of edge −→A is changed to 5, its symmetric edge 1 on
+Rs+l+1 w.r .t.the symmetric line that is perpendicular to −→B
+labeled with 3 on R∗
+l .
+Proposition 6 If either (−→A /bigsqcap−→B ̸=∅ and −→A × −→B ≥ 0 and
+PeB /∈ H(−→A ))o r( −→A /bigsqcap−→B ̸=∅ and −→A × −→B < 0 and
+PeA ∈ H(−→B )) holds, then edge −→B is directly moved to the
+edge after the one having the same edge group as edge −→A.
+We next explain how the edge −→B advances based on
+Proposition 6. For example, in Fig. 9(2), −→A /bigsqcap−→B ̸=∅ and−→A ×−→B < 0 and PeA ∈ H(−→B ), hence−→B moves forward. As
+the edge −→A is labeled with 7, −→B moves to the edge labeled
+w i t h8o nR∗
+l , which is the next of the edge labeled with 7 on
+R∗
+l . Note that if the edge labeled with 8 did not actually exist
+in the intersection polygon R∗
+l , then −→B should repeatedly
+move on until it reaches the ﬁrst “real” edge on R∗
+l .
+We then present our faster algorithm for computing the
+intersection of inscribed regular polygons that uses the
+advance rules in terms of Propositions 5 and 6 .
+Algorithm FastRPolyInter. The regular polygon intersection
+algorithm, i.e., FastRPolyInter, is the optimized version of the
+convex polygon intersection algorithm CPolyInter, based on
+Propositions 5 and 6 . We also save vertexes of a polygon in a
+ﬁxed size array, which is different from CPolyInter that saves
+123
+Author's personal copy
+
+906 X. Lin et al.
+Fig. 9 Examples of fast advancing rules
+polygons in linked lists. Considering the regular polygons
+each having a ﬁxed number of vertexes/edges, marked from
+1t o m, this policy allows us to quickly address an edge or a
+vertex with its label.
+Given intersection polygon R∗
+l of the preview l poly-
+gons and the next approximate polygon Rs+l+1, algorithm
+FastRPolyInter returns R∗
+l+1 = R∗
+l
+/bigsqcapRs+l+1.I tr u n st h e
+similar routine as the CPolyInter algorithm, except that (1)
+it saves polygons in arrays, and (2) the advance strate-
+gies are partitioned into two parts, i.e., −→A /bigsqcap−→B ̸=∅ and−→A /bigsqcap−→B =∅ , where the former applies Propositions 5 and
+6 , and the latter remains the same as algorithm CPolyInter.
+Correctness and complexity analyses. Observe that algo-
+rithm FastRPolyInter basically has the same routine as
+algorithm CPolyInter, except that it speeds up the advance
+of directed edges −→A and −→B under certain circumstances
+as shown by Propositions 5 and 6 , which together ensure
+the correctness of FastRPolyInter. Moreover, algorithm
+FastRPolyInter runs in O(1) time by Proposition 4.
+4 One-pass trajectory simpliﬁcation
+A naive algorithm that directly outputs all the data points in
+the given trajectory is one-pass, however, it is hardly to be
+an effective trajectory simpliﬁcation algorithm. Does there
+exist an effective, one-pass and error bounded line simpliﬁ-
+cation algorithm using SED? This remains an open question
+in the community. We next present a positive answer to this
+question. The main result here is stated as follows.
+Theorem 7 There exist effective one-pass error bounded and
+strong and weak trajectory simpliﬁcation algorithms using
+the synchronous Euclidean distance ( SED).
+We shall prove this by providing such algorithms employ-
+ing the synchronous distance checking technique developed
+in Sect. 3. More speciﬁcally, following [ 14,39], we consider
+two classes of trajectory simpliﬁcation. The ﬁrst one, referred
+to as strong simpliﬁcation, that takes as input a trajectory ...
+T ,
+an error bound ϵ and the number m of edges for inscribed
+regular polygons, and produces a simpliﬁed trajectory
+...
+T
+′
+such that all data points in
+...
+T ′belong to ...
+T . The second one,
+Fig. 10 One-pass strong trajectory simpliﬁcation algorithm
+referred to as weak simpliﬁcation , that takes as input a tra-
+jectory ...
+T , an error bound ϵ and the number m of edges for
+inscribed regular polygons, and produces a simpliﬁed trajec-
+tory
+...
+T ′such that some data points in
+...
+T ′may not belong to...
+T . That is, weak simpliﬁcation allows data interpolation.
+4.1 Strong trajectory simplification
+Recall that in Propositions 1 and 2 , the point Q may not be
+in the input sub-trajectory [Ps, ...,Ps+k]. If we restrict Q =
+Ps+k , the end point of the sub-trajectory, then the narrow
+cones whose base circles with a radius of ϵ/2 sufﬁce, as
+shown below.
+Proposition 8 Given a sub-trajectory [Ps, ...,Ps+k] and an
+error bound ϵ,s e d(Ps+i ,−−−−→Ps Ps+k) ≤ ϵfor each i ∈[ 1, k] if/bigsqcapk
+i=1C(Ps, O(Ps+i,ϵ/2)) ̸={ Ps}.
+We now present the one-pass error bounded strong tra-
+jectory simpliﬁcation algorithm using SED based on Propo-
+sition 8, as shown in Fig. 10.
+Procedure getRegularPolygon. We ﬁrst present procedure
+getRegularPolygon that, given a cone projection circle, gen-
+erates its inscribed m-edges regular polygon, following the
+deﬁnition in Sect. 3.3.
+The parameters Ps , Pi , r and tc together form the
+projection circle Oc(Pc
+i , r c
+i ) of the spatiotemporal cone
+C(Ps, O(Pi, r)) of point Pi w.r .t.point Ps on the plane P.t−tc
+= 0. Firstly, Pc
+i .x and Pc
+i .y are computed (lines 1–3), and
+r c
+i = w · r . Then, it builds and returns an m-edges inscribed
+123
+Author's personal copy
+
+One-pass trajectory simpliﬁcation using the synchronous Euclidean distance 907
+Fig. 11 A running example of the CISED-S algorithm. The points and
+the oblique circular cones are projected on an x-y space. The trajectory...
+T [P0,..., P10] is compressed into four line segments. The solid line
+circles are synchronous circles, each has a radius of ϵ/2, and the dash
+line circles are cone projection circles whose inscribe regular polygons
+are computed
+regular polygon R of Oc(Pc
+i , r c
+i ) (lines 4–8), by transform-
+ing a polar coordinate system into a Cartesian one. Note here
+θ , r · sin θ and r · cos θ only need to be computed once during
+the entire processing of a trajectory.
+Algorithm CISED-S. It takes as input a trajectory ...
+T
+[P0,..., Pn], an error bound ϵ and the number m of edges
+for inscribed regular polygons, and returns a simpliﬁed tra-
+jectory
+T of ...
+T .
+The algorithm ﬁrst initializes the start point Ps to P0,t h e
+index i of the current data point to 1, the intersection poly-
+gon R∗ to ∅, the output T to ∅, and tc to P1.t, respectively
+(line 1). The algorithm sequentially processes the data points
+of the trajectory one by one (lines 2–10). It gets the m-edge
+inscribed regular polygon w.r .t.the current point Pi (line 3)
+by calling procedure getRegularPolygon. When R∗ =∅ ,
+the intersection polygon R∗ is simply initialized as R (lines
+4, 5). Otherwise, R∗ is the intersection of the current regular
+polygon R with R∗ by calling procedure FastRPolyInter()
+introduced in Sect. 3.4 (line 7). If the resulting intersection
+R∗ is empty, then a new line segment −−−−→Ps Pi−1 is generated
+(lines 8–10). The process repeats until all points have been
+processed (line 11). After the ﬁnal line segment −−→Ps Pn is
+generated (line 12), it returns the simpliﬁed piecewise line
+representation
+T (line 13).
+Example 6 Figure 11 shows a running example of CISED-S
+for compressing the trajectory ...
+T in Fig. 2.
+(1) After initialization, the CISED-S algorithm reads point P1
+and builds a narrow cone C(P0, O(P1,ϵ/2)), taking P0 as its
+apex andO(P1,ϵ/2) as its base (green). Thecone is projected
+on the plane P.t − P1.t = 0, and the inscribe regular polygon
+R1 of the projection circle is returned. As R∗ is empty, R∗
+is set to R1.
+(2) The algorithm reads P2 and builds C(P0, O(P2,ϵ/2))
+(red). The cone is also projected on the plane P.t − P1.t = 0
+and the inscribe regular polygon R2 of the projection circle
+(red) is returned. As R∗ = R1 is not empty, R∗ is set to the
+intersection of R2 and R∗, which is R1
+/bigsqcapR2 ̸=∅ .
+(3) For point P3, the algorithm runs the same routine as P2
+until the intersection of R3 and R∗ is ∅. Thus, a line segment−−→P0 P2 is generated, and the process of a new line segment is
+started, taking P2 as the new start point and P.t − P3.t = 0
+as the new projection plane.
+(4) At last, the algorithm outputs four continuous line seg-
+ments, i.e., {−−→P0 P2, −−→P2 P4, −−→P4 P7, −−−→P7 P10} (Fig. 10). ⊓⊔
+4.2 Weak trajectory simplification
+We then present the one-pass error bounded weak simpliﬁca-
+tion algorithm using SED. By allowing data interpolations, it
+extends the radii of the base circles of spatiotemporal cones
+in CISED-S from ϵ/2t o ϵ, which leads to better compression
+ratios than CISED-S. Recall that in Proposition 2, the point Q
+may not be in the input sub-trajectory [Ps, ...,Ps+k], which
+can be treated as an interpolated data point.
+Algorithm CISED-W. Given a trajectory ...
+T [P0,..., Pn],a n
+error bound ϵ and the number m of edges for inscribed
+regular polygons, it returns a simpliﬁed trajectory, which
+may contain interpolated points. By Proposition 2, algorithm
+CISED-W generates spatiotemporal cones whose bases are
+circles with a radius of ϵ, and, hence, it replaces ϵ/2 with
+ϵ (line 3 of CISED-S). It also generates new line segments
+with data points Q (may be interpolated points), and, hence,
+it replaces point Pi and line segment −−→Ps Pi (lines 9 and 10 of
+algorithm CISED-S) with Q and −−→Ps Q, respectively, such that
+Q is generated as follows.
+Proposition 9 Given a sub-trajectory ...
+T [Ps,..., Ps+k] and
+an error bound ϵ,t c = Ps+k.t and R∗
+k be the intersection of
+all polygons Rs+i (i ∈[ 1, k]) on the plane P .t − tc = 0.I f
+R∗
+k is not empty, then any point in the area of R∗
+k is feasible
+for Q.
+The choice of a point Q from R∗
+k may slightly affect the
+compression ratios and average errors. However, the choice
+of an optimal Q is non-trivial. For the beneﬁt of running time,
+we apply the following strategies.
+123
+Author's personal copy
+
+908 X. Lin et al.
+Fig. 12 A running example of the CISED-W algorithm. The points and
+the oblique circular cones are projected on an x-y space. The trajectory...
+T [P0,..., P10] is compressed into three line segments. The solid line
+circles are synchronous circles, each has a radius of ϵ, and the dash line
+circles are cone projection circles. Note in (5) a point,P′
+4, is Interpolated
+(1) If Ps+k is in the area of R∗
+k w.r .t. tc = Ps+k.t, then Q is
+simply set to Ps+k .
+(2) If R∗
+k ̸=∅ and Ps+k is not in the area of R∗
+k w.r .t.
+tc=Ps+k.t, then the central point of R∗
+k is chosen as Q.
+(3) If tc ̸= Ps+k.t, which is the general case, then we project
+the intersection polygon R∗
+k w.r .t. tc ̸= Ps+k.t on the plane
+P.t − Ps+k.t = 0, and apply strategies (1) and (2) above.
+That is, the projection has no affects on the choice of Q.
+Example 7 Figure 12 shows a running example of algorithm
+CISED-W for compressing the trajectory ...
+T in Fig. 2 again.
+(1) After initialization, algorithm CISED-W reads point P1
+and builds an oblique circular cone C(P0, O(P1,ϵ) ), and
+projects it on the plane P.t − P1.t = 0. The inscribed reg-
+ular polygon R1 of the projection circle is returned, and the
+intersection R∗ is set to R1.
+(2) P2, P3 and P4 are processed in turn. The intersection
+polygons R∗ are not empty.
+(3) For point P5, the intersection of polygons R5 and R∗ is
+∅. Thus, line segment −−→P0 Q = −−→P0 P′
+4 is output, and a new line
+segment is started such that point Q = P′
+4 is the new start
+point and plane P.t − P5.t = 0 is the new projection plane.
+(4) At last, the algorithm outputs 3 continuous line segments,
+i.e., −−→P0 P′
+4, −−→P′
+4 P8 and −−−→P8 P10, in which P′
+4 is an interpolated
+data point not in ...
+T . ⊓⊔
+Correctness and complexity analyses . The correctness of
+algorithms CISED-S and CISED-W follows from Proposi-
+tions 2 and 8 , and Propositions 2 and 9 , respectively.
+It is easy to verify that each data point in a trajectory is
+only processed once, and each can be done in O(1) time,
+as both procedures getRegularPolygon and FastRPolyInter
+can be done in O(1) time. Hence, these algorithms are
+both one-pass error bounded trajectory simpliﬁcation algo-
+rithms. It is also easy to see that these algorithms take O(1)
+space.
+5 Experimental study
+In this section, we present an extensive experimental study
+of our one-pass trajectory simpliﬁcation algorithms ( CISED-
+S and CISED-W) compared with the compression optimal
+algorithm using SED (C-Optimal) and existing algorithms
+of DPSED and SQUISH-E on trajectory datasets. Using four
+real-life trajectory datasets, we conducted sets of experi-
+ments to evaluate: (1) the compression ratios of algorithms
+CISED-S and CISED-W vs. DPSED, SQUISH-E and C-Optimal,
+(2) the average errors of algorithms CISED-S and CISED-W
+vs. DPSED, SQUISH-E and C-Optimal, (3) the running time
+of algorithms CISED-S and CISED-W vs. DPSED, SQUISH-E
+and C-Optimal, (4) the impacts of polygon intersection algo-
+rithms FastRPolyInter and CPolyInter and the edge number
+m of inscribed regular polygons to the compression ratios,
+errors and running time of algorithms CISED-S and CISED-
+W, (5) the impacts of the distance metrics PED and SED on
+the compression ratios, errors and running time of trajectory
+simpliﬁcation algorithms and (6) the impacts of the distance
+metrics PED and SED on spatiotemporal queries.
+5.1 Experimental setting
+Real-life Trajectory Datasets. We use four real-life datasets
+ServiceCar, GeoLife, Mopsi and PrivateCar shown in Table2
+to test our solutions.
+(1) Service car trajectory data(ServiceCar) is the GPS trajec-
+tories collected by a Chinese car rental company during April
+2015 to November 2015. The sampling rate was one point
+per 3–5 s, and each trajectory has around 114 .1K points.
+(2) GeoLife trajectory data (GeoLife) is the GPS trajectories
+collected in GeoLife project [ 43] by 182 users in a period
+from Apr. 2007 to Oct. 2011. These trajectories have a variety
+of sampling rates, among which 91% are logged with one
+point per 1–5 s.
+(3) Mopsi trajectory data (Mopsi) is the GPS trajectories
+collected in Mopsi project [ 21] by 51 users in a period from
+2008 to 2014. Most routes are in Joensuu region, Finland.
+123
+Author's personal copy
+
+One-pass trajectory simpliﬁcation using the synchronous Euclidean distance 909
+Table 2 Real-life trajectory datasets
+Data sets Number of trajectories Sampling rates (s) Points per trajectory (K) Total points
+ServiceCar 1,000 3–5 ∼ 114.0 114M
+GeoLife 182 1–5 ∼ 131.4 24.2M
+Mopsi 51 2 ∼ 153.97 . 9 M
+PrivateCar 10 1 ∼ 11.8 112.8K
+The sampling rate was one point per 2 s, and each trajectory
+has around 153.9K points.
+(4) Private car trajectory data (PrivateCar) is a small set
+GPS trajectories collected with a high sampling rate of one
+point per second by our team members in 2017. There are 10
+trajectories and each trajectory has around 11.8K points.
+As the compression optimal algorithm C-Optimal[13] has
+both high time and space complexities, i.e., O (n
+3) time and
+O(n2) space, it is impossible to compress the entire datasets
+(slow and out of memory). Hence, we further build four
+small datasets such that each includes 10 middle-size (10 K
+points per trajectory) trajectories selected from ServiceCar,
+GeoLife, Mopsi and PrivateCar, respectively.
+Algorithms and implementation . We implement seven LS
+algorithms, i.e., our CISED-S and CISED-W, sector intersec-
+tion algorithm using PED (SIPED)[ 7,42], DPPED and DPSED
+(DP using PED [6] and DP using SED [19], the existing sub-
+optimal LS algorithms having the best compression ratios),
+SQUISH-E [23] (the fastest existing LS algorithm using SED)
+and C-Optimal (the compression optimal LS algorithm using
+SED, see Sect. 2.2). We also implement the polygon intersec-
+tion algorithms, CPolyInter and our FastRPolyInter.
+All algorithms were implemented with Java. All tests were
+run on an x64-based PC with 8 Intel(R) Core(TM) i7-6700
+CPU @ 3.40GHz and 8GB of memory, and each test was
+repeated over 3 times and the average is reported here.
+5.2 Experimental results
+We next present our ﬁndings.
+5.2.1 Evaluation of compression ratios
+In the ﬁrst set of tests, we evaluate the impacts of parame-
+ter m on the compression ratios of our algorithms CISED-S
+and CISED-W, and compare the compression ratios of CISED-
+S and CISED-W with DPSED, SQUISH-E and C-Optimal.
+The compression ratio is deﬁned as follows: Given a set of
+trajectories {
+...
+T
+1,...,
+...
+TM} and their piecewise line represen-
+tations {T1,..., TM}, the compression ratio of an algorithm
+is (∑ M
+j=1 |T j|)/(∑ M
+j=1 | ...
+T j|). By the deﬁnition, algorithms
+with lower compression ratios are better .
+Exp-1.1: Impacts of parameter m on compression ratios.
+To evaluate the impacts of the number m of edges of poly-
+gons on the compression ratios of algorithms CISED-S and
+CISED-W, and also to conﬁrm that our fast regular polygon
+intersection algorithm FastRPolyInter has the same com-
+pression ratios as the convex polygon intersection algorithm
+CPolyInter, we ﬁxed the error bound ϵ = 60 m, and varied
+m from 4 to 40. The results are reported in Fig. 13.
+(1) Algorithms CISED-S and CISED-W using FastRPolyInter
+have the same compression ratios as their counterparts using
+CPolyInter for all cases.
+(2) When varying m, the compression ratios of algorithms
+CISED-S and CISED-W decrease with the increase of m on all
+datasets. The increase of edge number m of a regular poly-
+gon makes the polygon better approximate its corresponding
+circle, which leads to a higher potential to have common
+intersections, and has a better compression ratio.
+(3) When varying m, the compression ratios of algorithms
+CISED-S and CISED-W decrease (a) fast when m < 12, (b)
+slowly whenm ∈[ 12, 20], and (c) very slowly whenm > 20.
+Hence, the region of [12, 20] is a good candidate region for
+m in terms of compression ratios.Here, the compression ratio
+of m=12 is only on average 100 .95% of m=20.
+Exp-1.2: Impacts of the error bound ϵ on compression
+ratios (vs. algorithms DPSED and SQUISH-E). To evalu-
+ate the impacts of error bound ϵ on compression ratios, we
+ﬁxed m=16, the middle of [12, 20], and varied ϵfrom 10 to
+200 m on the entire four datasets, respectively. The results
+are reported in Fig. 14 .
+(1) When increasing ϵ, the compression ratios of all these
+algorithms decrease on all datasets, as it is clear that a largerϵ
+makes more points represented by a line segment, and brings
+a better compression ratio.
+(2) Dataset PrivateCar has the lowest compression ratios,
+compared with datasets Mopsi, ServiceCar and GeoLife, due
+to its highest sampling rate, ServiceCar has the highest com-
+pression ratios due to its lowest sampling rate, and GeoLife
+and Mopsi have the compression ratios in the middle accord-
+ingly.
+(3) Algorithm CISED-S is better than SQUISH-E and close
+to DPSED on all datasets and for all ϵ. The compres-
+sion ratios of CISED-S are on average (79 .3%, 71 .9%,
+123
+Author's personal copy
+
+910 X. Lin et al.
+Fig. 13 Evaluation of compression ratios: ﬁxed error bound with ϵ= 60 m and varying m. Here, “R” denotes our fast regular polygon intersection
+algorithm FastRPolyInter, and “C” denotes the convex polygon intersection algorithm CPolyInter, respectively
+Fig. 14 Evaluation of compression ratios: ﬁxed with m = 16 and varying error bound ϵ
+Fig. 15 Evaluation of compression ratios: ﬁxed with m = 16 and varying error bound ϵ(on small datasets)
+Fig. 16 Evaluation of compression ratios: ﬁxed with m = 16 and ϵ= 60 m, and varying the size of trajectories
+67.3%, 72 .7%) and (109 .2%, 108 .0%, 111 .7%, 109 .1%)
+of SQUISH-E and DPSED on datasets ( ServiceCar, GeoLife,
+Mopsi, PrivateCar), respectively. For example, when ϵ
+= 40 m, the compression ratios of algorithms SQUISH-
+E, CISED-S and DPSED are (20 .0%, 8 .0%, 5 .7%, 4 .9%),
+(16.1%, 5 .8%, 3 .9%, 3 .6%) and (14 .8%, 5 .4%, 3 .4%,
+3.4%) on datasets (ServiceCar, GeoLife, Mopsi, PrivateCar),
+respectively. CISED-S shows better compression ratios than
+123
+Author's personal copy
+
+One-pass trajectory simpliﬁcation using the synchronous Euclidean distance 911
+SQUISH-E because CISED-S applies an approximate policy
+that includes as many points as possible into a line segment
+during the process, while SQUISH-E applies a loose error pre-
+diction policy, which may ignore too many potential points
+that could be represented by a line segment in order to assure
+the error bound.
+(4) Algorithm CISED-W has better compression ratios than
+DPSED, SQUISH-E and CISED-S on all datasets and for
+all ϵ. The compression ratios of CISED-W are on average
+(57.7%, 53 .8%, 50 .0%, 54 .6%), (79 .5%, 81 .0%, 83 .0%,
+82.0%) and (72 .9%, 75.0%, 74.3%, 75.1%) of algorithms
+SQUISH-E, DPSED and CISED-S on datasets ( ServiceCar,
+GeoLife, Mopsi, PrivateCar), respectively. For example,
+when ϵ= 40 m, the compression ratios of algorithm CISED-
+W are (11.5%, 4.3%, 2.8%, 2.7%) on datasets ( ServiceCar,
+GeoLife, Mopsi,
+PrivateCar), respectively. Algorithm CISED-
+W extends the radii of base circles of spatiotemporal cones
+from ϵ/2 in CISED-S to ϵ, thus, it has better compression
+ratios than CISED-S.
+Exp-1.3: Impacts of the error bound ϵ on compression
+ratios (vs. the compression optimal algorithm). To evalu-
+ate the impacts of error bound ϵ on compression ratios, we
+again ﬁxed m=16, the middle of [12, 20], and varied ϵfrom
+10 to 200 m on the ﬁrst 1 K points of each trajectory of the
+selected small datasets, respectively. The results are reported
+in Fig. 15 .
+(1) Algorithm CISED-S is worse than the compression opti-
+mal algorithm C-Optimal on all datasets and for all ϵ.M o r e
+speciﬁcally, the compression ratios of CISED-S are on aver-
+age (134.6%, 150 .7%, 155.5%, 138.5%) of C-Optimal on
+datasets ( ServiceCar, GeoLife, Mopsi, PrivateCar), respec-
+tively. For example, when ϵ= 40 m, the compression ratios
+of CISED-S and C-Optimal are (22.0%, 5.9%, 1.9%, 3.3%)
+and (16 .4%, 4 .2%, 0 .9%, 2 .4%) on datasets ( ServiceCar,
+GeoLife, Mopsi, PrivateCar), respectively.
+(2) Algorithm CISED-W has the closest compression ratios to
+the compression optimal algorithm C-Optimal on all datasets
+and for all ϵ. The compression ratios of CISED-W are on
+average (94.8%, 115.5%, 119.7%, 107.5%) of C-Optimal on
+datasets ( ServiceCar, GeoLife, Mopsi, PrivateCar), respec-
+tively. For example, when ϵ= 40 m, the compression ratios
+of algorithm CISED-W are (14 .6%, 4 .6%, 1 .2%, 2 .5%) on
+datasets ( ServiceCar, GeoLife, Mopsi, PrivateCar), respec-
+tively. This is because algorithm CISED-W allows data
+interpolations, by Proposition 2, it extends the radii of the
+base circles of the spatiotemporal cones from ϵ/2i nC I S E D -
+St o ϵin CISED-W to contain more points.
+Exp-1.4: Impacts of trajectory sizes on compression
+ratios. To evaluate the impacts of trajectory size, i.e., the
+number of data points in a trajectory, on compression ratios,
+we chose the same 10 trajectories from datasets ServiceCar,
+GeoLife, Mopsi
+and PrivateCar, respectively, ﬁxed m=16 and
+ϵ=60 m, and varied the size
+...
+|T | of trajectories from 1K points
+to 10 K points. The results are reported in Fig. 16.
+(1) The compression ratios of these algorithms ordered from
+the best to the worst are CISED-W, DPSED, CISED-S and
+SQUISH-E, on all datasets with all sizes of trajectories, which
+is consistent with the previous tests.
+(2) The sizes of input trajectories have few impacts on the
+compression ratios of LS algorithms on all datasets.
+5.2.2 Evaluation of average errors
+In the second set of tests, we ﬁrst evaluate the impacts of
+parameter m on the average errors of algorithms CISED-S
+and CISED-W, then compare the average errors of our algo-
+rithms CISED-S and CISED-W with DPSED, SQUISH-E and the
+compression optimal algorithm C-Optimal.
+Given a set of trajectories {
+...
+T
+1,..., ...
+T M} and their piece-
+wise line representations {T1,..., T M}, and point Pj,i
+denoting a point in trajectory ...
+T j contained in a line seg-
+ment Ll,i ∈ Tl (l ∈[ 1, M]), then the average error is∑ M
+j=1
+∑ M
+i=0 d(Pj,i, Ll,i)/∑ M
+j=1 | ...
+T j|.
+Exp-2.1: Impacts of parameter m on average errors .T o
+evaluate the impacts of parameter m on average errors of
+algorithms CISED-S and CISED-W, and to conﬁrm that our fast
+regular polygon intersection algorithm FastRPolyInter has
+the same average errors as the convex polygon intersection
+algorithm CPolyInter, we ﬁxed the error bound ϵ = 60 m,
+and varied m from 4 to 40. The results are reported in Fig.17.
+(1) Algorithms CISED-S and CISED-W using FastRPolyInter
+have the same average errors as their counterparts using
+CPolyInter, respectively, on all datasets and for all m.
+(2) When varying m, the average errors of algorithms CISED-
+S and CISED-W increase with the increase ofm on all datasets.
+The increase of edge number m of a regular polygon makes
+the polygon more closely approximate its corresponding cir-
+cle, which means that some points having larger SED, i.e.,
+closer to half-ϵin CISED-S or ϵin CISED-W, are also included
+to a line segment, which further leads to a larger average error.
+(3) When varying m, similar to compression ratios, the aver-
+age errors of algorithms CISED-S and CISED-W increase (a)
+fast when m < 12, (b) slowly when m ∈[ 12
+, 20], and (c)
+very slowly when m > 20. The range of [12, 20] is also
+the good candidate region for m in terms of errors. Here,
+the average error of m = 12 is only on average 98 .49% of
+m = 20.
+Exp-2.2: Impacts of the error bound ϵon average errors
+(vs. algorithmsDPSED and SQUISH-E). To evaluate the aver-
+age errors of these algorithms, we ﬁxed m=16, and varied ϵ
+from 10 to 200 m on the entire datasets ServiceCar, GeoLife,
+Mopsi and PrivateCar, respectively. The results are reported
+in Fig. 18.
+123
+Author's personal copy
+
+912 X. Lin et al.
+Fig. 17 Evaluation of average errors: ﬁxed error bound with ϵ = 60 m and varying m. Here, “R” denotes our fast regular polygon intersection
+algorithm FastRPolyInter, and “C” denotes CPolyInter, respectively
+Fig. 18 Evaluation of average errors: ﬁxed with m = 16 and varying error bound ϵ
+Fig. 19 Evaluation of average errors: ﬁxed with m = 16 and varying error bound ϵ(on small datasets)
+Fig. 20 Evaluation of average errors: ﬁxed with m = 16 and ϵ= 60 m, and varying the size of trajectories
+(1) Average errors increase with the increase of ϵ.M o r e
+speciﬁcally, the average error of each algorithm has approxi-
+mately a linear relation to ϵ. It is clear that a larger ϵincludes
+more points into a line segment, including points with larger
+SED, which brings a better compression ratio as well as a
+larger average error.
+(2) The average errors of these algorithms from the largest
+to the smallest are CISED-W, CISED-S, DPSED and SQUISH-
+123
+Author's personal copy
+
+One-pass trajectory simpliﬁcation using the synchronous Euclidean distance 913
+E, on all datasets and for all ϵ. The average errors of
+algorithms CISED-S and CISED-W are on average (119 .3%,
+127.7%, 119.9%, 138.0%) and (210 .1%, 207.5%, 200.9%,
+217.5%) of DPSED and (188.2%, 215.2%, 212.8%, 180.3%)
+and (331 .1%, 349 .7%, 356 .7%, 284 .2%) of SQUISH-E on
+datasets ( ServiceCar, GeoLife, Mopsi, PrivateCar), respec-
+tively. Algorithms CISED-W and CISED-S apply an approx-
+imate policy, i.e., they include as many points as possible
+into a line segment, and this policy usually leads to a larger
+average error.
+(3) When the error bound of algorithm CISED-W is set as
+the half of CISED-S, the average errors of CISED-W are
+on average (93 .8%, 86.0%, 81.4%, 79.4%) of CISED-
+S on
+datasets ( ServiceCar, GeoLife,Mopsi, PrivateCar), respec-
+tively, meaning that the large average errors of algorithm
+CISED-W are caused by its cone w.r .t.ϵ compared with the
+narrow cone w.r .t.ϵ/2o f CISED-S.
+Exp-2.3: Impacts of the error bound ϵon average errors
+(vs. the compression optimal algorithm). To evaluate the
+average errors of these algorithms, we ﬁxedm=16, and varied
+ϵfrom 10 to 200 m on the ﬁrst 1 K points of each trajectory
+of the small datasets , respectively. The results are reported
+in Fig. 19.
+The average errors of these algorithms from the largest
+to the smallest are CISED-W, the compression optimal algo-
+rithm C-Optimal and CISED-S, on all datasets and for all ϵ.
+The average errors of CISED-S and CISED-W a r eo na v e r -
+age (73.6%, 80.7%, 85.1%, 81.0%) and (133 .3%, 130.7%,
+131.0%, 126 .3%) of C-Optimal on datasets ( ServiceCar,
+GeoLife, Mopsi, PrivateCar), respectively. Note that here
+algorithm
+C-Optimal has the worst average error among
+all strong line simpliﬁcation algorithms, as algorithm C-
+Optimal is optimal in terms of compression ratio, and
+algorithms with better compression ratios generate less line
+segments, which usually leads to larger errors.
+Exp-2.4: Impacts of trajectory sizes on average errors .
+To evaluate the impacts of trajectory sizes on average errors,
+we chose the same 10 trajectories from datasets ServiceCar,
+GeoLife, Mopsi and PrivateCar, respectively. We ﬁxedm=16
+and ϵ = 60 m, and varied the size
+...
+|T | of trajectories from
+1K points to 10 K points. The results are reported in Fig. 20.
+(1) The average errors of these algorithms ordered from the
+smallest to the largest are SQUISH-E, DPSED, CISED-S and
+CISED-W, on all datasets and for all trajectory sizes, which
+is consistent with the above tests.
+(2) The sizes of input trajectories have few impacts on the
+average errors of LS algorithms on all datasets.
+5.2.3 Evaluation of running time
+In the third set of tests, we evaluate the impacts of parameter
+m on the running time of algorithms CISED-S and CISED-W,
+and compare the running time of our approachesCISED-S and
+CISED-W with algorithms C-Optimal, DPSED and SQUISH-E.
+Exp-3.1: Impacts of algorithmFastRPolyInter and param-
+eter m on running time. To evaluate the impacts of parame-
+ter m
+on the running time of algorithmCISED-S and CISED-W,
+and also to conﬁrm that our fast regular polygon intersection
+algorithm FastRPolyInter runs faster than the convex polygon
+intersection algorithm CPolyInter, we equipped CISED-S and
+CISED-W with FastRPolyInter and CPolyInter, respectively,
+ﬁxed ϵ= 60 m, and varied m from 4 to 40. The results are
+reported in Figs. 21 and 22 .
+(1) Algorithms CISED-S and CISED-W spend most their time
+on executing the polygon intersections. For all m, the execu-
+tion time of algorithms CPolyInter and FastRPolyInter is on
+average (93.5%, 96.0%, 94.5%, 92.0%) and (90.5%, 92.5%,
+91.0%, 90.5%) of the entire compression time on datasets
+(ServiceCar, GeoLife, Mopsi, PrivateCar), respectively.
+(2) FastRPolyInter runs faster than CPolyInter on all datasets
+and for all m due to the techniques that it applies to speed
+up the computation of polygon intersection. The execution
+time of algorithms CISED-S-FastRPolyInter and CISED-W-
+FastRPolyInter is one average 83.74% their counterparts with
+CPolyInter.
+(3) When varying m, the execution time of algorithms
+CISED-S-FastRPolyInter, CISED-S-CPolyInter, CISED-W-
+FastRPolyInter and CISED-W-CPolyInter increases approxi-
+mately linearly with the increase ofm on all the datasets, e.g.,
+the running time of m = 12 is on average 69.92% of m = 20
+for CISED-S and CISED-W on all datasets. This is because the
+time complexities of FastRPolyInter and CPolyInter are both
+O(m), and a larger m leads to more comparisons of edges
+during the computation of polygon intersection.
+Exp-3.2: Impacts of the error bound ϵ on running time
+(VS. algorithms DPSED and SQUISH-E). To evaluate the
+impacts of ϵ on running time, we ﬁxed m = 16, and varied
+ϵfrom 10 to 200 m on the entire datasets, respectively. The
+results are reported in Fig. 23.
+(1) All algorithms are not very sensitive to ϵon any datasets,
+and algorithm DPSED is more sensitive to ϵ than the other
+three algorithms. The running time of DPSED decreases a
+little bit with the increase ofϵ, as the increment ofϵdecreases
+the number of partitions of the input trajectory.
+(2) Algorithms CISED-S and CISED-W are obviously faster
+than DPSED and SQUISH-E for all cases. They are on aver-
+age (14 .21, 18 .19, 17 .06, 9 .98) times faster than DPSED,
+and (2.84, 3.45, 3.69, 2.86) times faster than SQUISH-E on
+datasets ( ServiceCar, GeoLife, Mopsi, PrivateCar), respec-
+tively. This is consistent with their time complexity analyses.
+Exp-3.3: Impacts of the error bound ϵ on running time
+(VS. the compression optimal algorithm). To evaluate the
+impacts of ϵ on running time, we ﬁxed m = 16, and varied
+123
+Author's personal copy
+
+914 X. Lin et al.
+Fig. 21 Evaluation of running time of polygon intersection algorithms: ﬁxed error bound with ϵ= 60 m, and varying m. Here, “R” denotes our
+fast regular polygon intersection algorithm FastRPolyInter, and “C” denotes CPolyInter, respectively
+Fig. 22 Evaluation of running time: ﬁxed error bound with ϵ= 60 m, and varying m
+Fig. 23 Evaluation of running time: ﬁxed with m = 16 and varying error bounds ϵ
+Fig. 24 Evaluation of running time: ﬁxed with m = 16 and varying error bounds ϵ(on small datasets)
+ϵfrom 10 to 200 m on the ﬁrst 1 K points of each trajectory
+of the selected small datasets , respectively. The results are
+reported in Fig. 24.
+(1) Algorithms CISED-S and CISED-W are obviously faster
+than C-Optimal for all cases. They are on average (925 .25,
+7888.26, 40041.59, 8528.76) times faster than C-Optimal on
+123
+Author's personal copy
+
+One-pass trajectory simpliﬁcation using the synchronous Euclidean distance 915
+Fig. 25 Evaluation of running time: ﬁxed with m = 16 and ϵ= 60 m, and varying the size of trajectories
+datasets ( ServiceCar, GeoLife, Mopsi, PrivateCar), respec-
+tively.
+Exp-3.4: Impacts of trajectory sizes on running time .T o
+evaluate the impacts of trajectory sizes on running time, we
+chose the same 10 trajectories, from datasets ( ServiceCar,
+GeoLife, Mopsi, PrivateCar), respectively, ﬁxed m = 16 and
+ϵ = 60 m, and varied the size
+...
+|T | of trajectories from 1 K
+points to 10 K points. The results are reported in Fig. 25.
+(1) Algorithms CISED-S and CISED-W are both the fastest LS
+algorithms using SED, and are (8.00–10.00, 5.83–8.11, 4.00–
+9.50, 5.00–8.09) times faster than DPSED, and (2 .53–3.00,
+2.62–3.12, 2.50–3.33, 2.89–3.40) times faster than SQUISH-
+E on the selected 1 K to 10 K points datasets ( ServiceCar,
+GeoLife, Mopsi, PrivateCar), respectively.
+(2) Algorithms CISED-S and CISED-W scale well with the
+increase of the size of trajectories on all datasets, and both
+have a linear running time, while algorithm DPSED does not.
+This is consistent with their time complexity analyses.
+(3) The advantage of running time of algorithms CISED-S
+and CISED-W increases with the increase of trajectory sizes
+compared with DPSED and SQUISH-E.
+5.2.4 Evaluation of distance metrics PED versus SED
+In this set of tests, we compare the performance of algo-
+rithms using PED vs. SED. Two pairs of algorithms are
+tested, namely, (1) the algorithm DP using PED and SED,
+respectively, and (2) the sector intersection algorithm [36,40]
+using PED and our spatiotemporal cone intersection algo-
+rithm using SED.
+Exp-4.1: Impacts of distance metrics on compression
+ratios. To evaluate the impacts of distance metrics, i.e.,PED
+and SED, on compression ratios, we ﬁxed m=16 and varied
+ϵfrom 10 to 200 m on the entire four datasets, respectively.
+The results are reported in Fig. 26.
+Given the same error bound ϵ, the compression ratios
+using PED are obviously better than using SED. More specif-
+ically, the compression ratios of algorithm DP using PED are
+on average (47.1%, 55.5%, 60.7%, 44.7%) of algorithm DP
+using SED and the compression ratios of algorithm CISED
+-S
+are on average (45.4%, 54.5%, 60.1%, 43.0%) of algorithm
+SIPED on datasets (ServiceCar, GeoLife, Mopsi, PrivateCar),
+respectively. The reason behind this is that aPED of a point is
+the shortest distance from the point to a line segment, while
+a SED of a point is the distance between the point and its syn-
+chronized data point w.r .t.the line segment. Thus, the SED
+of a point to a line segment is always not less than the PED
+of the point to the line segment. Hence, given the same error
+bound ϵ, LS algorithms using SED usually include less points
+into a line segment. In other words, they generate more line
+segments.
+Exp-4.2: Impacts of distance metrics on average errors .
+To evaluate the impacts of distance metrics on average errors,
+we ﬁxed m=16 and varied ϵfrom 10 to 200 m on the entire
+four datasets, respectively. The results are reported in Fig.27.
+Given the same error bound ϵ, the average errors of algo-
+rithms using SED are a bit larger than usingPED. The average
+errors of algorithm DP using PED are on average (76 .7%,
+77.6%, 79.7%, 63.0%) of algorithm DP using SED, and the
+average errors of algorithm SIPED are on average (97 .5%,
+78.1%, 92.4%, 74.2%) of algorithm CISED-S on (ServiceCar,
+GeoLife, Mopsi,
+PrivateCar), respectively. As we know, the
+PED error is originally caused by the direction changes of a
+moving object, while the SED error is caused by the changes
+of both the direction and the speed of a moving object. It
+seems that the speed factor introduces an extra error, and
+leads to a larger average error.
+Exp-4.3: Impacts of distance metrics on running time.T o
+evaluate the impacts of distance metrics on running time, we
+also ﬁxed m=16 and varied ϵfrom 10 to 200 m on the entire
+four datasets, respectively. The results are reported in Fig.28.
+Given the same error bound ϵ, the running time of DP
+using PED is on average (24 .3%, 119 .9%, 23 .4%, 91 .3%)
+of DP using SED. Algorithm DP using PED runs faster than
+using SED because DP using PED has a better compres-
+sion ratio than SED, which is the result of less trajectory
+splitting and distance computing operations during the com-
+pression. The running time of algorithm SIPED is on average
+(7.0%, 36 .3%, 19 .9%, 69 .2%) of algorithm CISED-S on
+datasets ( ServiceCar, GeoLife, Mopsi, PrivateCar), respec-
+123
+Author's personal copy
+
+916 X. Lin et al.
+Fig. 26 Evaluation of compression ratios ( PED vs. SED): ﬁxed with m = 16 and varying error bound ϵ
+Fig. 27 Evaluation of average errors ( PED vs. SED): ﬁxed with m = 16 and varying error bound ϵ
+Fig. 28 Evaluation of running time ( PED vs. SED): ﬁxed with m = 16 and varying error bounds ϵ
+tively. AlgorithmCISED-S runs slower than SIPED sometimes
+because ﬁnding the common intersection of spatiotemporal
+cones is a heavier computation than sectors.
+5.2.5 Evaluation of spatiotemporal queries on compressed
+trajectories
+In the last set of tests, we evaluate compressed trajecto-
+ries from the viewpoint of trajectory application, i.e., spa-
+tiotemporal query. The well-known spatiotemporal queries
+are where_at, when_at, range, nearest_neighbor and spa-
+tial_join [1]. Among them,where_at query,i.e., “the position
+P of a moving object at time t ,” is the foundation of range
+and nearest_neighbor queries. Hence, we choose it to evalu-
+ate compressed trajectories simpliﬁed by LS algorithms using
+PED and/or SED. As mentioned in [1], the answer towhere_at
+query is the expected position P
+′of the moving object at time
+t. Indeed, it is the synchronized point of P when the query is
+performed on simpliﬁed trajectories.
+We ﬁrst compress these trajectories using PED and SED,
+respectively. When compressing, we also ﬁxed m=16 for
+algorithms CISED-S and CISED-W, and varied ϵ from 10 to
+200 m for all algorithms on the entire four datasets, respec-
+tively. Then, for each point P in an original trajectory ...
+T ,w e
+perform a query on each of its compressed trajectories tak-
+ing time P.t as input, and calculate the distance between the
+actual position P and the expected position P
+′to denote the
+error of queries. The max and average errors of the queries
+are reported in Table 3 and Fig. 29, respectively.
+(1) When usingSED, the max errors of spatiotemporal queries
+on compressed trajectories are always not larger than error
+bounds. However, when using PED, they are more than 10 6
+meters in datasets ServiceCar, GeoLife and Mopsi, and more
+than 10 3 meters in dataset PrivateCar, signiﬁcantly larger
+123
+Author's personal copy
+
+One-pass trajectory simpliﬁcation using the synchronous Euclidean distance 917
+Table 3 The max errors of spatiotemporal queries on compressed tra-
+jectories: ﬁxed with m = 16 and ϵ= 60 meters
+Alg. ServiceCar GeoLife Mopsi PrivateCar
+SIPED 4.81 × 106 1.91 × 106 1.40 × 106 9.45 × 103
+DPPED 4.27 × 106 1.03 × 106 4.21 × 106 2.24 × 103
+DPSED 59.99 59.99 59.99 59.99
+CISED-S 59.99 59.99 59.99 59.99
+CISED-W 59.98 59.99 59.99 59.95
+SQUISH-E 59.99 59.98 59.99 59.99
+than error bounds. This large error phenomenon is actually
+possible. For example, if someone travels from Beijing of
+China to Sydney of Australia. During the trip, he ﬁrst closes
+his mobile when the air plane is ready to take off, then he turns
+on his mobile after he arrives at Sydney. Because the sub-
+trajectory includes data points located in two small regions,
+i.e., the Beijing and Sydney airports, it is possible that the
+sub-trajectory is compressed by someLS algorithm usingPED
+into a single line segment, even the error boundϵis set to just
+60 meters. When a where_at is performed on the long line
+segment, it may return an approximate point having a large
+error to the actual position. Besides, we also ﬁnd that the data
+quality problem of the original given trajectories, such as an
+abnormal change of GPS location or time, e.g., the latitude
+and longitude of a moving object suddenly change from one
+country to another country, or even somewhere in the ocean,
+can aggravate the large error phenomenon of spatiotemporal
+queries on compressed trajectories that are simpliﬁed using
+PED. These conﬁrm that SED is more suitable than PED for
+spatiotemporal queries.
+(2) Given the same error bound, the average errors of these
+queries on compressed trajectories using PED are obvious
+larger than those usingSED, and they are typically larger than
+error bounds. Moreover, algorithm SI using PED has larger
+spatiotemporal query errors than DP using PED because SI
+applies a greedy policy that tries to include as many points
+into a line segment, and some of these “extra-points” lead to
+large errors.
+5.2.6 Summary and discussion
+Summary. From these tests we ﬁnd the following.
+(1) Datasets . The behaviors of all algorithms across all
+datasets are quite similar.
+(2) Polygon intersection algorithms . Algorithm
+FastRPolyInter runs faster than algorithm CPolyInter and
+has the same compression ratios and average errors as
+CPolyInter.
+(3) Parameter m . The compression ratio decreases with the
+increase of m, and the running time increases nearly linearly
+with the increase of m. In practice, the range of [12, 20] is a
+good candidate region for m.
+(4) Compression ratios . The compression optimal LS algo-
+rithm C-Optimal has the best compression ratios among all
+strong simpliﬁcation algorithms. Algorithm CISED-S is close
+to DPSED and algorithm CISED-
+W is better than all the sub-
+optimal LS algorithms. The compression ratios of algorithms
+CISED-S, C-Optimal and CISED-W are on average (79 .3%,
+71.9%, 67.3%, 72.7%), (58.1%, 45.1%, 39.2%, 52.8%) and
+(57.7%, 53.8%, 50.0%, 54.6%) of SQUISH-E and (109.2%,
+108.0%, 111.7%, 109.1%), (81.3%, 75.5%, 72.5%, 78.1%)
+and (79.5%, 81.0%, 83.0%, 82.0%) of DPSED on datasets
+(ServiceCar, GeoLife, Mopsi, PrivateCar), respectively.
+(5) Average errors . The average errors of these algorithms
+from the smallest to the largest areSQUISH-E, DPSED, CISED-
+S, C-Optimal and CISED-W. Algorithm CISED-W has obvious
+higher average errors than CISED-S as the former essentially
+forms spatiotemporal cones with a radius of ϵ.
+(6) Running time. Algorithms CISED-S and CISED-W are the
+fastest. They are on average (14 .21, 18 .19, 17 .06, 9 .98),
+(2.84, 3 .45, 3 .69, 2 .86) and (925 .25, 7888 .26, 40041 .59,
+8528.76) times faster thanDPSED, SQUISH-E and C-Optimalon
+datasets ( ServiceCar, GeoLife, Mopsi, PrivateCar), respec-
+tively. The advantage of running time of algorithms CISED-S
+and CISED-W also increases with the increase of the trajectory
+size.
+(7) Distance metrics . Compared with PED, SED supports
+spatiotemporal queries. However, it comes a price, e.g., the
+Fig. 29 Average errors of spatiotemporal queries: ﬁxed with m = 16 and varying error bound ϵ
+123
+Author's personal copy
+
+918 X. Lin et al.
+compression ratios of algorithms using PED are better than
+those using SED.
+(8) Spatiotemporal Queries . SED is more suitable than PED
+for applications like spatiotemporal queries.
+Discussion. We next brieﬂy discuss the choice of algorithms
+to compress trajectories. As different applications may have
+different requirements to reach a balance among multiple
+metrics, we only provide a brief guideline from the views of
+running time, compression ratio and average error, respec-
+tively.
+(1) When the running time is the ﬁrst-level consideration or
+algorithms are run in resource-constrained devices, the one-
+pass algorithms, i.e., CISED-S and CISED-W, are surely the
+best choices, and they have pretty good compression ratios
+at the same time.
+(2) When the compression ratio is the priority, algorithm
+CISED-W and the compression optimal algorithmC-Optimal are
+the selections, followed by algorithms DPSED and CISED-S.
+(3) When considering errors, SQUISH-E is a good choice
+because it has a relative small average error. Alternatively,
+we can also use DPSED or CISED-S by setting a smaller error
+bound ϵcompared with SQUISH-E.
+6 Related work
+Trajectory compression algorithms are normally classiﬁed
+into two categories, namely lossless compression and lossy
+compression [23]. (1) Lossless compression methods enable
+exact reconstruction of the original data from the compressed
+data without information loss. (2) In contrast, lossy com-
+pression methods allow errors or deviations, compared with
+the original trajectories. These techniques typically identify
+important data points and remove statistical redundant data
+points from a trajectory, or replace original data points in
+a trajectory with other places of interests, such as roads
+and shops. They focus on good compression ratios with
+acceptable errors. In this work, we focus on lossy compres-
+sion of trajectory data, and we next introduce the related
+work on lossy trajectory compression from two aspects: line
+simpliﬁcation-based methods and semantics-based methods.
+6.1 Line simplification-based methods
+The idea of piecewise line simpliﬁcation comes from com-
+putational geometry. Its target is to approximate a given ﬁner
+piecewise linear curve by another coarser piecewise linear
+curve, which is typically a subset of the former, such that
+the maximum distance of the former to the later is bounded
+by a user speciﬁed bound ϵ. Initially, line simpliﬁcation ( LS)
+algorithms use perpendicular Euclidean distances ( PED)a s
+the distance metric. Then, a new distance metric, the syn-
+chronous Euclidean distances (SED), was developed after the
+LS algorithms were introduced to compress trajectories. SED
+was ﬁrst introduced in the name oftime-ratio distancein [19],
+and formally presented in [29]a st h esynchronous Euclidean
+distance. PED and SED are two common metrics adopted in
+trajectory simpliﬁcation. The former usually brings better
+compression ratios, while the latter reserves temporal infor-
+mation in the result trajectories. Besides, there is direction
+based metric [17] that preserves the directions of trajectories.
+Line simpliﬁcation algorithms can be classiﬁed into two
+classes: compression optimal and sub-optimal methods.
+6.1.1 Compression optimal algorithms
+For the “min-#” problem that ﬁnds out the minimal number
+of points or segments to represent the original polygonal lines
+w.r .t.an error bound ϵ,I m a ia n dI r i[13] ﬁrst formulated it as
+a graph problem, and showed that it could be solved inO(n
+3)
+time, where n is the number of the original points. Toussaint
+of [ 38] and Melkman and O’Rourke of [ 18] improved the
+time complexity to O(n2 log n) by using either convex hull or
+sector intersectionmethods. The authors of [2] further proved
+that the compression optimal algorithm using PED could be
+implemented in O(n2) time by using the sector intersection
+mechanism. Because the sector intersection and the convex
+hull mechanisms cannot work with SED, hence, currently
+the time complexity of the compression optimal algorithm
+using SED remains O(n
+3). That is, these compression optimal
+algorithms are time-consuming and impractical when dealing
+with large trajectory data [ 10].
+6.1.2 Compression sub-optimal algorithms
+Many studies have been targeting at ﬁnding the sub-optimal
+results. In particular, the state-of-the-art of sub-optimal LS
+approaches fall into three categories, i.e., batch, online and
+one-pass algorithms. We next introduce these LS-based tra-
+jectory compression algorithms from three categories.
+Batch algorithms. The batch algorithms adopt a global dis-
+tance checking policy that requires all trajectory points are
+loaded before compressing starts. These batch algorithms can
+be either top-down or bottom-up.
+Top-down algorithms, e.g., Ramer [ 30] and Douglas–
+Peucker [6], recursively divide a trajectory into sub-trajectories
+until the stopping condition is met. Bottom-up algorithms,
+e.g., Theo Pavlidis’ algorithm [ 26], is the natural comple-
+ment of the top-down ones, which recursively merge adjacent
+sub-trajectories with the smallest distance, initially n/2 sub-
+trajectories for a trajectory with n points, until the stopping
+condition is met. The distances of newly generated line seg-
+ments are recalculated during the process. These algorithms
+originally only support PED, but are easy to be extended to
+123
+Author's personal copy
+
+One-pass trajectory simpliﬁcation using the synchronous Euclidean distance 919
+support SED [19]. The batch nature and high time complex-
+ities make batch algorithms impractical for online and/or
+resource-constrained scenarios [ 14].
+Online algorithms. The online algorithms adopt a con-
+strained global distance checking policy that restricts the
+checking within a sliding or opening window. Constrained
+global checking algorithms do not need to have the entire
+trajectory ready before they start compressing, and are more
+appropriate than batch algorithm for compressing trajectories
+for online scenarios.
+Several LS algorithms have been developed, e.g., by com-
+bining DP or Theo Pavlidis’with sliding or opening windows
+for online processing [ 19]. These methods still have a high
+time and/or space complexity, which signiﬁcantly hinders
+their utility in resource-constrained mobile devices [15]. BQS
+[15,16] and SQUISH-E [23] further optimize the opening win-
+dow algorithms. BQS [15,16] speeds up the processing by
+picking out at most eight special points from an open win-
+dow based on a convex hull, which, however, hardly supports
+SED.T h eSQUISH-E [23] algorithm is a combination of open-
+ing window and bottom-up online algorithm. It uses a doubly
+linked list Q to achieve a better efﬁciency. AlthoughSQUISH-
+E supports SED, it is not one-pass, and has a relatively poor
+compression ratio.
+One-pass algorithms. The one-pass algorithms adopt a local
+distance checking policy. They do not need a window to
+buffer the previously read points as they process each point
+in a trajectory once and only once. Obviously, the one-pass
+algorithms run in linear time and constant space.
+The n–th point routine and the routine of random-
+selection of points [35] are two naive one-pass algorithms. In
+these routines, for every ﬁxed number of consecutive points
+along the line, the n–th point and one random point among
+them are retained, respectively. They are fast, but are obvi-
+ously not error bounded. In Reumann–Witkam routine [ 31],
+it builds a strip paralleling to the line connecting the ﬁrst two
+points; then, the points within this strip compose one section
+of the line. The Reumann–Witkam routine also runs fast,
+but has limited compression ratios. The sector intersection
+(SI) algorithm [36,40] was developed for graphic and pattern
+recognition in the late 1970s, for the approximation of arbi-
+trary planar curves by linear segments or ﬁnding a polygonal
+approximation of a set of input data points in a 2D Cartesian
+coordinate system. [7] optimized algorithm SI by considering
+the distance between a potential end point and the initial point
+of a line segment, and the Sleeve algorithm [42] in the carto-
+graphic discipline essentially applies the same idea as the SI
+algorithm. The authors of this article also developed a one-
+pass error bounded ( OPERB) algorithm [ 14]. However, all
+existing one-pass algorithms use PED [7,14,36,40,42], while
+this study focuses on SED.
+6.2 Semantics-based methods
+The trajectories of certain moving objects such as cars and
+trucks are constrained by road networks. These moving
+objects typically travel along road networks, instead of the
+line segment between two points. Trajectory compression
+methods based on road networks [ 3,5,8,9,12,28,37] project
+trajectory points onto roads (also known as Map-Matching).
+Moreover, [8,9,37] mine and use high frequency patterns of
+compressed trajectories, instead of roads, to further improve
+compression effectiveness. Some methods [32,33] compress
+trajectories beyond the use of road networks and further make
+use of other user speciﬁed domain knowledge, such as places
+of interests along the trajectories [ 32].
+These semantics-based approaches are orthogonal to line
+simpliﬁcation-based methods and may be combined with
+each other to improve the effectiveness of trajectory com-
+pression.
+7 Conclusions
+We have proposed CISED-S and CISED-W, two one-pass
+error bounded strong and weak trajectory simpliﬁcation
+algorithms using the synchronous distance. We have also
+experimentally veriﬁed that algorithms CISED-S and CISED-
+W are fast and have good compression ratios. They are three
+times faster than SQUISH-E, the fastest existing LS algorithm
+using SED. In terms of compression ratio, algorithm CISED-S
+is close to DPSED, the existing LS algorithm with the best
+compression ratio, and is 21 .1% better than SQUISH-E on
+average; and algorithm CISED-W is better than all the sub-
+optimal algorithm and is on average 19.6% and 42.4% better
+than DPSED and SQUISH-E, respectively.
+Acknowledgements This work is supported in part by National
+Key R&D Program of China 2018YFB1700403, NSFC U1636210
+&61421003, Shenzhen Institute of Computing Sciences, and the Fun-
+damental Research Funds for the Central Universities. Funding was
+provided by National Natural Science Foundation of China (Grant
+No. U1636210), 973 program (Grant No. 2014CB340300), Beijing
+Advanced Innovation Center for Big Data and Brain Computing.
+Appendix: Proofs
+Proof of Proposition 1 Let P′
+s+i (i ∈[ 1, k]) be the intersec-
+tion point of line segment −−→Ps Q and the plane P.t − Ps+i.t =
+0. It sufﬁces to show that the intersection point P′
+s+i satisﬁes
+that (1) P′
+s+i.t = Ps+i.t,( 2 )P′
+s+i.x = Ps.x+w·(Q.x− Ps.x),
+and (3) P′
+s+i.y = Ps.y + w · (Q.y − Ps.y), where w =
+P′
+s+i .t−Ps.t
+Q.t−Ps.t = Ps+i .t−Ps.t
+Q.t−Ps.t . Hence, P′
+s+i is indeed a synchro-
+nized point of Ps+i w.r .t.−−→Ps Q, and the distance |−−−−−→Ps+i P′
+s+i|
+123
+Author's personal copy
+
+920 X. Lin et al.
+from Ps+i to P′
+s+i is the synchronous distance of Ps+i to
+−−→Ps Q.
+We assume ﬁrst that /bigsqcapk
+i=1C(Ps, O(Ps+i,ϵ) )̸={ Ps}.
+Then, there must exist a point Q in the area of the syn-
+chronous circle O(Ps+k,ϵ) such that −−→Ps Q passes through
+all the cones C(Ps, O(Ps+i,ϵ) )i ∈[ 1, k]. Hence, Q.t =
+Ps+k.t.W ea l s oh a v esed(Ps+i,−−→Ps Q) =| −−−−−→P′
+s+i Ps+i|≤ ϵfor
+each i ∈[ 1, k] since P′
+s+i is in the area of circle O(Ps+i,ϵ).
+Conversely, assume that there exists a point Q such that
+Q.t = Ps+k.t and sed(Ps+i,−−→Ps Q) ≤ ϵ for all Ps+i (i ∈
+[1, k]). Then, |−−−−−→P′
+s+i Ps+i|≤ ϵ for all i ∈[ 1, k]. Hence, we
+have /bigsqcapk
+i=1C(Ps, O(Ps+i ,ϵ) )̸={ Ps}. ⊓⊔
+Proof of Proposition 2 By Proposition 1, it sufﬁces to show
+that /bigsqcapk
+i=1 Oc(Pc
+s+i, r c
+s+i) ̸=∅ if and only if /bigsqcapk
+i=1
+C(Ps, O(Ps+i,ϵ) )̸={ Ps}, which is obvious. Hence, we have
+the conclusion. ⊓⊔
+Proof of Proposition 3 We shall prove this by contradiction.
+Assume ﬁrst that R∗
+l
+/bigsqcapRs+l+1 has more thanm edges. Then,
+it must have two distinct edges −→Ai and −→Ai′ with the same
+label j (1 ≤ j ≤ m), originally from Rs+i and Rs+i′
+(1 ≤ i < i′≤ l + 1). Note that here Rs+i
+/bigsqcapRs+i′ ̸=∅ since
+R∗
+l
+/bigsqcapRs+l+1 ̸=∅ . However, when Rs+i
+/bigsqcapRs+i′ ̸=∅ ,t h e
+intersection Rs+i
+/bigsqcapRs+i′ cannot have both edge −→Ai and
+edge −→Ai′, as all edges with the same label are in parallel
+(or overlapping) with each other by the above deﬁnition of
+inscribed regular polygons. This contradicts with the assump-
+tion. ⊓⊔
+Proof of Proposition 4 The inscribed regular polygonR
+s+l+1
+has m edges, and intersection polygon R∗
+l has at most m
+edges by Proposition 3. As the intersection of two m-edges
+convex polygons can be computed in O(m) time [ 25], the
+intersection of polygons R∗
+l and Rs+l+1 can be done in O(1)
+t i m ef o raﬁ x e dm. ⊓⊔
+Proof of Proposition 5 If (−→A /bigsqcap−→B ̸=∅ and −→A × −→B < 0
+and PeA /∈ H(−→B ))o r( −→A /bigsqcap−→B ̸=∅ and −→A × −→B ≥ 0
+and PeB ∈ H(−→A )), then as all edges in the same edge group
+E j (1 ≤ j ≤ m) are in parallel with each other and by the
+geometric properties of regular polygon Rs+k+1,i ti se a s y
+to ﬁnd that, for each position of −→A between its original to its
+opposite positions, we have (1) −→A /bigsqcap−→B =∅ , and (2) either
+PeA /∈ H(−→B ) or PeB ∈ H(−→A ). Hence, by the advance rule
+(1) of algorithm CPolyInter in Sect. 2.4, edge −→A is always
+moved forward until it reaches the opposite position of its
+original one. From this, we have the conclusion. ⊓⊔
+Proof of Proposition 6 If (−→A /bigsqcap−→B ̸=∅ and −→A × −→B ≥ 0
+and P
+eB /∈ H(−→A ))o r( −→A /bigsqcap−→B ̸=∅ and −→A × −→B < 0
+and PeA ∈ H(−→B )), then it is also easy to ﬁnd that, for each
+position of −→B between its original to its target positions (i.e.,
+the edge after the one having the same edge group as −→A ),
+we have (1) −→A /bigsqcap−→B =∅ , and (2) either PeB /∈ H(−→A ) or
+PeA ∈ H(−→B ). Hence, by the advance rule (2) of algorithm
+CPolyInter in Sect. 2.4, edge −→B is always moved forward
+until it reaches the target position. From this, we have the
+conclusion. ⊓⊔
+Proof of Proposition 8 If /bigsqcape
+i=s+1 C(Ps, Ps+i ,ϵ/2) ̸={ Ps},
+then by Proposition 1, there exists a point Q, Q.t = Ps+k.t,
+such that sed(Ps+i,−−→Ps Q) ≤ ϵ/2 for all i ∈[ 1, k].B y
+the triangle inequality essentially, sed(Ps+i,−−−−→Ps Ps+k) ≤
+sed(Ps+i,−−→Ps Q) +| −−−−→QPs+k|≤ ϵ/2 + ϵ/2 = ϵ. ⊓⊔
+Proof of Proposition 9 By Proposition 2 and the nature of
+inscribed regular polygon, it is easy to ﬁnd that for any point
+Q ∈ R∗
+k w.r .t.plane tc = Ps+k.t, there is sed(Ps+i,−−→Ps Q) ≤
+ϵ for all points Ps+i (i ∈[ 1, k]). From this, we have the
+conclusion. ⊓⊔
+References
+1. Cao, H., Wolfson, O., Trajcevski, G.: Spatio-temporal data reduc-
+tion with deterministic error bounds. VLDBJ 15(3), 211–228
+(2006)
+2. Chan, W., Chin, F.: Approximation of polygonal curves with min-
+imum number of line segments or minimal error. Int. J. Comput.
+Geom. Appl. 6(1), 378–387 (1996)
+3. Chen, Y ., Jiang, K., Zheng, Y ., Li, C., Y u, N.: Trajectory simpli-
+ﬁcation method for location-based social networking services. In:
+LBSN, pp. 33–40 (2009)
+4. Chen, M., Xu, M., Fränti, P .: A fast multiresolution polygonal
+approximation algorithm for GPS trajectory simpliﬁcation. IEEE
+Trans. Image Process. 21(5), 2770–2785 (2012)
+5. Civilis, A., Jensen, C.S., Pakalnis, S.: Techniques for efﬁcient road-
+network-based tracking of moving objects. TKDE 17(5), 698–712
+(2005)
+6. Douglas, D.H., Peucker, T.K.: Algorithms for the reduction of the
+number of points required to represent a digitized line or its cari-
+cature. Can. Cartogr. 10(2), 112–122 (1973)
+7. Dunham, J.G.: Piecewise linear approximation of planar curves.
+PAMI 8, 9–67 (1986)
+8. Gotsman, R., Kanza, Y .: A dilution-matching-encoding com-
+paction of trajectories over road networks. GeoInformatica 19(2),
+331–3364 (2015)
+9. Han, Y ., Sun, W., Zheng, B.: Compress: a comprehensive frame-
+work of trajectory compression in road networks. TODS 42(2),
+11:1–11:9 (2017)
+10. Heckbert, P .S., Garland, M.: Survey of polygonal surface simpliﬁ-
+cation algorithms. In: SIGGRAPH (1997)
+11. Hershberger, J., Snoeyink, J.: Speeding up the Douglas–Peucker
+line-simpliﬁcation algorithm. Technical Report, University of
+British Columbia (1992)
+12. Hung, C.C., Peng, W., Lee, W.: Clustering and aggregating clues
+of trajectories for mining trajectory patterns and routes. VLDBJ
+24(2), 169–192 (2015)
+13. Imai, H., Iri, M.: Computational-geometric methods for polygonal
+approximations of a curve. Comput. Vis. Graph. Image Process.
+36, 31–41 (1986)
+123
+Author's personal copy
+
+One-pass trajectory simpliﬁcation using the synchronous Euclidean distance 921
+14. Lin, X., Ma, S., Zhang, H., Wo, T., Huai, J.: One-pass error bounded
+trajectory simpliﬁcation. PVLDB 10(7), 841–852 (2017)
+15. Liu, J., Zhao, K., Sommer, P ., Shang, S., Kusy, B., Jurdak, R.:
+Bounded quadrant system: Error-bounded trajectory compression
+on the go. In: ICDE (2015)
+16. Liu, J., Zhao, K., Sommer, P ., Shang, S., Kusy, B., Lee, J.-G.,
+Jurdak, R.: A novel framework for online amnesic trajectory
+compression in resource-constrained environments. IEEE Trans.
+Knowl. Data Eng. 28(11), 2827–2841 (2016)
+17. Long, C., Wong, R.C.-W., Jagadish, H.: Direction-preserving tra-
+jectory simpliﬁcation. PVLDB 6(10), 949–960 (2013)
+18. Melkman, A., O’Rourke, J.: On polygonal chain approximation.
+Mach. Intell. Pattern Recognit. 6, 87–95 (1988)
+19. Meratnia, N., de By, R.A.: Spatiotemporal compression techniques
+for moving point objects. In: EDBT (2004)
+20. Metha, R., Mehta, V .K.: The Principles of Physics. S Chand, New
+Delhi (1999)
+21. Mopsi routes 2014. http://cs.uef.ﬁ/mopsi/routes/dataset/ .
+Accessed 29 Nov 2017
+22. Muckell, J., Hwang, J.-H., Lawson, C.T., Ravi, S.S.: Algorithms
+for compressing gps trajectory data: an empirical evaluation. In:
+ACM-GIS (2010)
+23. Muckell, J., Olsen, P .W., Hwang, J.-H., Lawson, C.T., Ravi, S.S.:
+Compression of trajectory data: a comprehensive evaluation and
+new approach. GeoInformatica 18(3), 435–460 (2014)
+24. Nibali, A., He, Z.: Trajic: an effective compression system for tra-
+jectory data. TKDE 27(11), 3138–3151 (2015)
+25. O’Rourke, J., Chien, C.B., Olson, T., Naddor, D.: A new linear
+algorithm for intersecting convex polygons. Comput. Graph. Image
+Process. 19(4), 384–391 (1982)
+26. Pavlidis, T., Horowitz, S.L.: Segmentation of plane curves. IEEE
+Trans. Comput. 23(8), 860–870 (1974)
+27. Pfoser, D., Jensen, C.S.: Capturing the uncertainty of moving-
+object representations. In: SSD (1999)
+28. Popa, I.S., Zeitouni, K., Oria, V ., Kharrat, A.: Spatio-temporal com-
+pression of trajectories in road networks. GeoInformatica 19(1),
+117–145 (2014)
+29. Potamias, M., Patroumpas, K., Sellis, T.K.: Sampling trajectory
+streams with spatiotemporal criteria. In: SSDBM (2006)
+30. Ramer, U.: An iterative procedure for the polygonal approximation
+of plane curves. Comput. Graph. Image Process.1, 244–256 (1972)
+31. Reumann, K., Witkam, A.: Optimizing curve segmentation in com-
+puter graphics. In: International Computing Symposium (1974)
+32. Richter, K.-F., Schmid, F., Laube, P .: Semantic trajectory compres-
+sion: representing urban movement in a nutshell. J. Spat. Inf. Sci.
+4(1), 3–30 (2012)
+33. Schmid, F., Richter, K., Laube, P .: Semantic trajectory compres-
+sion. In: SSTD, pp. 411–416 (2009)
+34. Shamos, M.I., Dan, H.: Geometric intersection problems. In: Sym-
+posium on Foundations of Computer Science, pp. 208–215 (1976)
+35. Shi, W., Cheung, C.: Performance evaluation of line simpliﬁca-
+tion algorithms for vector generalization. Cartogr. J. 43(1), 27–44
+(2006)
+36. Sklansky, J., Gonzalez, V .: Fast polygonal approximation of digi-
+tized curves. Pattern Recognit. 12, 327–331 (1980)
+37. Song, R., Sun, W., Zheng, B., Zheng, Y .: Press: a novel framework
+of trajectory compression in road networks. PVLDB7(9), 661–672
+(2014)
+38. Toussaint, G.T.: On the complexity of approximating polygonal
+curves in the plane. In: International Symposium on Robotics and
+Automation (IASTED) (1985)
+39. Trajcevski, G., Cao, H., Scheuermanny, P ., Wolfsonz, O., V accaro,
+D.: On-line data reduction and the quality of history in moving
+objects databases. In: MobiDE (2006)
+40. Williams, C.M.: An efﬁcient algorithm for the piecewise linear
+approximation of planar curves. Comput. Graph. Image Process.
+8, 286–293 (1978)
+41. Zhang, D., Ding, M., Y ang, D., Liu, Y ., Fan, J., Shen, H.T.: Tra-
+jectory simpliﬁcation: an experimental study and quality analysis.
+PVLDB 9(11), 934–946 (2018)
+42. Zhao, Z., Saalfeld, A.: Linear-time sleeve-ﬁtting polyline simpli-
+ﬁcation algorithms. In: Proceedings of AutoCarto, pp. 214–223
+(1997)
+43. Zheng, Y ., Xie, X., Ma, W.: GeoLife: a collaborative social net-
+working service among user, location and trajectory. IEEE Data
+Eng. Bull. 33(2), 32–39 (2010)
+44. Züﬂe, A., Trajcevski, G., Pfoser, D., Renz, M., Rice, M.T., Leslie,
+T., Delamater, P .L., Emrich, T.: Handling uncertainty in geo-spatial
+data. In: ICDE (2017)
+Publisher’s Note Springer Nature remains neutral with regard to juris-
+dictional claims in published maps and institutional afﬁliations.
+123
+Author's personal copy

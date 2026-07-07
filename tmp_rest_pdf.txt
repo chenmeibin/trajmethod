@@ -1,0 +1,1455 @@
+Reference-Based Framework for
+Spatio-Temporal Trajectory Compression
+and Query Processing
+Kai Zheng , Member, IEEE, Yan Zhao , Defu Lian , Bolong Zheng,
+Guanfeng Liu , and Xiaofang Zhou, Fellow, IEEE
+Abstract— The pervasiveness of GPS-enabled devices and wireless communication technologies results in massive trajectory data,
+incurring expensive cost for storage, transmission, and query processing. To relieve this problem, in this paper we propose a novel
+framework for compressing trajectory data, REST (Reference-based Spatio-temporal trajectory compression), by which a raw trajectory
+is represented by concatenation of a series of historical (sub-)trajectories (called reference trajectories) that form the compressed
+trajectory within a given spatio-temporal deviation threshold. In order to construct a reference trajectory set that can most beneﬁt the
+subsequent compression, we propose three kinds of techniques to select reference trajectories wisely from a large dataset such that the
+resulting reference set is more compact yet covering most footprints of trajectories in the area of interest. To address the computational
+issue caused by the large number of combinations of reference trajectories that may exist for resembling a given trajectory, we propose
+efﬁcient greedy algorithms that run in the blink of an eye and dynamic programming algorithms that can achieve the optimal compression
+ratio. Compared to existing work on trajectory compression, our framework has few assumptions about data such as moving within a road
+network or moving with constant direction and speed, and better compression performance with fairly small spatio-temporal loss. In
+addition, by indexing the reference trajectories directly with an in-memory R-tree and building connections to the raw trajectories with
+inverted index, we develop an extremely efﬁcient algorithm that can answer spatio-temporal range queries over trajectories in their
+compressed form. Extensive experiments on a real taxi trajectory dataset demonstrate the superiority of our framework over existing
+representative approaches in terms of both compression ratio and efﬁciency.
+Index Terms— Reference trajectory, spatio-temporal trajectory, compression
+Ç
+1I NTRODUCTION
+T
+HE prevalent use of various mobile devices, such as
+smart-phones, on-board diagnostics, personal navigation
+devices, and wearable smart devices, has resulted in massive
+amount of trajectory data. While they contain a wealth of
+mobility information and offer great opportunities for height-
+ening our understanding about human mobilities,
+transmitting and storing raw trajectory data consumes too
+much network bandwidth and storage capacity [1]. This is
+calling for effective trajectory compression techniques that
+can remove redundant and inessential samples from raw tra-
+jectory data to reduce the storage cost while preserving the
+utility of data.
+Trajectory data compression approaches can be generally
+divided into two categories: spatial and spatio-temporal com-
+pression. Treating trajectories as polylines, spatial compres-
+sion methods are also known as line simpliﬁcation algorithms
+(e.g., Douglas-Peucker (DP) [2] and Bellman’s algorithm [3]),
+which discard some samples within a given spatial deviation
+threshold from its original locations. However, trajectories are
+spatio-temporal records of moving objects, in which temporal
+information is also critical in many applications such as tra-
+jectory monitoring [4] and location tracking [5]. Ignoring
+temporal information during compression may produce
+unbounded erroneous results when querying the decom-
+pressed data. Therefore, recent studies focus on spatio-
+temporal compression algorithms [1], [6], [7], [8], [9], which
+adopt spatio-temporal criteria to bound the compression loss.
+The common feature of the above approaches is that they just
+exploit the spatio-temporal characteristics of the single trajec-
+tory to be compressed and assume moving objects do not
+change speed and/or direction frequently while traveling.
+However, this is quite an optimistic assumption for objects
+/C15 K. Zheng is with the School of Computer Science and Engineering, University
+of Electronic Science and Technology of China, Chengdu 610054, China, and
+also with Zhejiang Lab, Hangzhou 310000, China.
+E-mail: zhengkai@uestc.edu.cn.
+/C15 Y. Zhao is with the Institute of Artiﬁcial Intelligence, School of Computer Sci-
+ence and Technology, Soochow University, Suzhou 215006, China, and also
+with Zhejiang Lab, Hangzhou 310000, China. E-mail: zhaoyan@suda.edu.cn.
+/C15 D. Lian is with the School of Computer Science and Technology and School
+of Data Science, University of Science and Technology of China, Hefei
+230026, China. E-mail: dove.ustc@gmail.com.
+/C15 B. Zheng is with the School of Computer Science and Technology, Huazhong
+University of Science and Technology, Wuhan 430074, China.
+E-mail: bolongzheng@hust.edu.cn.
+/C15 G. Liu is with the Department of Computing, Macquarie University, Sydney
+NSW2109, Australia. E-mail: guanfeng.liu@mq.edu.au.
+/C15 X. Zhou is with the University of Queensland, Brisbane Q4072, Australia,
+and and also with Zhejiang Lab, Hangzhou 310000, China.
+E-mail: zxf@itee.uq.edu.au.
+Manuscript received 8 July 2018; revised 15 Apr. 2019; accepted 17 Apr. 2019.
+Date of publication 2 May 2019; date of current version 6 Oct. 2020.
+(Corresponding author: Yan Zhao.)
+Recommended for acceptance by J. M. Phillips.
+Digital Object Identiﬁer no. 10.1109/TKDE.2019.2914449
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 32, NO. 11, NOVEMBER 2020 2227
+1041-4347 /C2232019 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See ht_tps://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+moving with complicated trafﬁc condition, which is why
+those algorithms cannot achieve high compression ratio on
+real-world trajectory data. Recently, Song et al [10] propose a
+data-driven approach, called PRESS, that leverages shortest
+path and frequent trajectory pattern to compress trajectories
+in a road network. Nevertheless, there are two key prerequi-
+sites for PRESS to work properly. First, object movements
+must be constrained by a network, which does not apply for a
+wide range of free-space moving objects such as animals, ﬂy-
+ing objects, handwriting trajectories and so on. Second, the
+network should be relatively stable so that the compressed
+trajectories can be used properly. However, it is not uncom-
+mon the topology of road network changes frequently in
+developing areas (e.g., major cities of China). 1 Since PRESS
+relies on precomputed all-pair shortest paths, it has to recom-
+pute a large number of shortest paths every time the network
+updates, which is a time consuming process. Moreover, it
+takes tremendous space to store the all-pair shortest paths for
+each version of road network.2
+In this paper, we propose a completely data-driven
+framework, called REST ( Reference-based Spatio-temporal
+trajectory compression), for trajectory compression. There
+are a few advantages for REST compared to existing work.
+First, trajectories can originate from any kind of space
+(either constrained or non-constrained space). Second, it
+includes both spatial-only and spatio-temporal compression
+algorithms. Third, it only takes small amount of memory to
+store the auxiliary information (i.e., reference set). Fourth,
+the trajectory data are indexable and usable in their com-
+pressed form. This framework is based on some prior stud-
+ies that ﬁnd human mobilities have inherent high-level
+spatial and temporal regularity [11] (i.e., people have high
+probability to repeat similar travel patterns) and highly
+skewed travel distribution [12] (i.e., different people often
+take similar routes when traveling between certain loca-
+tions). Therefore it is feasible to extract a relatively small
+collection of trajectories, named reference trajectories, which
+“covers” most trajectories in the region of interest. Then
+given a new trajectory in the same area, there is high chance
+we can use a proper concatenation of reference (sub-)trajec-
+tories to resemble, at least partially, the given one. Com-
+pared with the raw format that keeps every location
+sample, this representation saves signiﬁcant space since
+only a series of identiﬁers and offsets of the reference (sub-)
+trajectories need to be recorded.
+As shown in Fig. 1, the REST framework is comprised of two
+components: reference set cons truction and reference-based
+compression. The ﬁrst component aims to build a reference
+system, where the challenge is how to trade off high coverage
+and low redundancy in the reference set such that subse-
+quent compression can be performed more effectively and
+efﬁciently. To this end, we present three kinds of approaches
+including Frequent Pattern-based Approach, Redundancy
+Reduction Approach and Compression-based Approach,
+which use different strategies to select a compact yet expres-
+sive reference set from a much larger but more redundant
+training dataset. The the second component needs to tackle
+the computational issue in the great number of reference tra-
+jectories we can use to represent a given trajectory. For the
+sake of efﬁciency, we propose greedy algorithms that try
+to represent the longest possible sequence of samples with a
+single reference trajectory. We also develop optimal
+algorithms to calculate the minimal storage cost of the com-
+pressed trajectory and obtain the corresponding optimal
+combination of reference trajectories.
+Though our preliminary work [13] has already optimally
+compressed the spatio-temporal information of trajectory
+data with reference trajectories, it fails to demonstrate the
+key utility of compressed trajectory data. Trajectory utility
+mainly depends on the effective and efﬁcient trajectory
+query processing in trajectory databases, which aims to
+evaluate the spatio-temporal relationships among spatial
+data objects. However, it is a challenging task to answer the
+trajectory queries efﬁciently due to the inherent difﬁculties
+in indexing trajectories as well as the new complexity intro-
+duced by the compressed trajectories, which are in the form
+of sequence of reference trajectories. To tackle this problem,
+we develop an effective hybrid index structure to support
+efﬁcient query processing over compressed trajectories
+without fully decompressing the data and then present the
+query processing based on the index structure in Section 6.
+As a summary, the major value-added extension over our
+preliminary work [13] in REST framework are four folds.
+1) We demonstrate REST can support the classical
+spatio-temporal queries (e.g., range queries) in tra-
+jectory databases without fully recovering the com-
+pressed trajectories.
+2) We design an effective hybrid index structure, con-
+sisting of both R-tree and inverted index, to support
+efﬁcient query processing over the compressed
+trajectories.
+3) We give more justiﬁcations about the custom deﬁned
+error metrics and discussions on the applicability of
+our REST framework to other trajectory similarity
+measures.
+4) An extensive experimental study is conducted on
+two real taxi trajectory datasets to validate the effec-
+tiveness and efﬁciency of the query processing on
+the compressed trajectories.
+The remainder of this paper is organized as follows.
+Section 2 introduces preliminary concepts, error metric and
+reference-based compression problem. We then present the
+construction of reference trajectory set in Section 3. The
+algorithms for spatial-only compression and spatio-temporal
+compression are presented in Section 4 and Section 5
+Fig. 1. REST framework overview.
+1. TomTom claims their digital maps have ﬁxes and updates every
+week. https://www.tomtom.com/en_au/mydrive-connect/
+2. Keeping all-pair shortest path requires OðjVj2Þ space where V
+represents the vertex set in a road network.
+2228 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 32, NO. 11, NOVEMBER 2020
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+respectively, followed by the extension of query processing
+for the compressed trajectories in Section 6. We report the
+results from empirical study in Section 7 and survey the
+related work in Section 8. Section 9 concludes this paper.
+2P ROBLEM STATEMENT
+In this section, we will present a set of preliminary concepts,
+introduce the error metric between raw and compressed tra-
+jectories, and ﬁnally state our problem and goal.
+2.1 Preliminary
+Deﬁnition 1 (Raw Trajectory). A raw trajectory of a moving
+object in 2D euclidean plane, denoted as T , is a ﬁnite sequence
+of timestamped locations with the form of ððx1;y 1;t 1Þ;ðx2;y 2;
+t2Þ; :::;ðxn;y n;t nÞÞ, whereðxi;y iÞ stands for the longitude and
+latitude information of a sampled location at time stamp ti.
+Deﬁnition 2 (Sub-Trajectory). A sub-trajectory, denoted by
+Tði;jÞ, is made of consecutive sample points of T from the ith to
+jth triplet, i.e., Tði;jÞ :ððxi;y i;t iÞ, ...,ðxj;y j;t jÞÞ.
+Trajectory compression is a process to reduce storage cost
+while keeping utility of a trajectory. Normally there are two
+measures when comparing trajectory compression methods:
+1) Compression Ratio measures how much space has been
+saved by compressing raw trajectories. It is usually
+deﬁned as the ratio between space costs of raw trajec-
+tories and compressed trajectories, i.e., CR¼ spaceðTÞ
+spaceðT0Þ.
+2) Compression Loss measures to what extent a com-
+pressed trajectory can be reconstructed to its corre-
+sponding raw format. It is usually quantiﬁed by a
+distance between raw trajectory and decompressed
+trajectory based on some predeﬁned distance function.
+These two factors are often trade-off: high compression
+ratio usually leads to greater compression loss and vice
+versa. Based on compression loss, trajectory compression
+can be classiﬁed into lossless compression and lossy com-
+pression. Due to the extremely ﬁne granularity (hence
+almost inﬁnite cardinality) of spatio-temporal dimensions
+in free space, lossless compre ssion algorithms either are
+not practical or have extremely low compression ratio.
+Thus in this paper we resort to bounded lossy compression
+algorithm.
+Deﬁnition 3 (Bounded Lossy Compression). Given a devi-
+ation threshold /C15,a n /C15-Bounded Lossy Compression algorithm
+transforms a raw trajectory T into a compressed trajectory T0,
+such that the distance between the reconstructed trajectory T/C3
+and T does not exceed /C15, i.e., dðT; T/C3 Þ/C20 /C15, where d is some pre-
+deﬁned distance function for trajectories.
+2.2 Error Metric
+In this paper, we propose a simple but effective variant
+of Dynamic Time Warping (DTW) [14] distance, called
+MaxDTW, to serve the error metric. It works exactly the
+same way as DTW in looking for the best alignment between
+two unsynchronized trajectories, with the only exception
+that it just needs to record the maximum distance among all
+matched pairs instead of the sum. More formally,
+Deﬁnition 4 (MaxDTW). Given two trajectories Ta¼ð p1;
+p2; :::; pnÞ and Tb¼ð q1;q 2; :::; qmÞ, the MaxDTW distance
+between them is deﬁned as follows:
+MaxDTWðTa;T bÞ¼
+0; if Ta¼ Tb¼;
+þ1; if Ta¼; or Tb¼;
+maxfdðpn;q mÞ;Qðpn;q mÞg; otherwise
+8
+<
+:
+Qðpn;q mÞ¼ min
+MaxDTWðTð1;n/C0 1Þ
+a ;Tð1;m/C0 1Þ
+b Þ
+MaxDTWðTð1;n/C0 1Þ
+a ;Tð1;mÞ
+b Þ
+MaxDTWðTð1;nÞ
+a ;Tð1;m/C0 1Þ
+b Þ
+8
+><
+>:
+;
+where dða; bÞ is a given distance between point a and b.
+Similar to DTW, we can use a dynamic programming
+algorithm [14] to compute MaxDTW.
+While our framework can be applied to both conventional
+DTW and the newly deﬁned MaxDTW (will be discussed in
+Section 4.1), we chose to deﬁne a custom metric MaxDTW
+because this is easier for user to set the error threshold. To
+see the reason, DTW is calculated based on distance aggrega-
+tion (sum of distance), so it is dependent on not only the
+closeness between two trajectories but also their size (i.e.,
+number of sample points). Therefore, when a user wants to
+compress a set of trajectories, she needs to set a different
+error threshold for each individual trajectory as they are of
+different sizes. For instance, we should set a lower error
+threshold for a trajectory with 10 points and higher error
+threshold for another trajectory with 100 points if we expect
+them to be compressed with similar quality. Of course, this
+problem can be solved by using the average DTW, i.e.,
+DTW/(size of trajectory), which is essentially the same as
+our proposed MaxDTW. The rational behind MaxDTW is
+the furthest pair-wise distance between two trajectories in
+their best DTW alignment, which is independent of the size.
+This also gives the user an intuitive view of the closeness
+they should expect to see between the decompressed trajec-
+tory and its corresponding raw trajectory.
+2.3 Reference-Based Compression
+As observed in previous studies [12], there is strong bias when
+most drivers plan their routes, which means given a new tra-
+jectory it is very likely to ﬁnd from a historical trajectory data-
+set a few trajectories that resemble, at least partially, the given
+one. We name these trajectory set as reference trajectory set ,
+denoted by R, which can be generated from a historical trajec-
+tory dataset in the region of interest (e.g., where the trajecto-
+ries to be compressed also reside). While it is difﬁcult to
+deﬁne the optimality of R, there are two qualitative measures
+for a good one—high coverage and low redundancy. Here
+high coverage means it has enough power to represent a given
+trajectory in the same area of interest, which heavily affects
+the compression ratio.Low redundancymeans most trajectories
+in R are quite unique in terms of their geographical locations
+since overlapping reference trajectories do not increase the
+expressive power and make the compression inefﬁcient. In
+the rest of the paper we use reference trajectory setand reference
+set interchangeably when no ambiguity is caused.
+Problem Statement. Given a reference trajectory set R,a
+trajectory T to be compressed and an error threshold /C15,a
+reference-based compression algorithm uses a selected
+ZHENG ET AL.: REFERENCE-BASED FRAMEWORK FOR SPATIO-TEMPORAL TRAJECTORY COMPRESSION AND QUERY PROCESSING 2229
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+subset of R, or their sub-trajectories whenever possible, to
+represent T , denoted as T0, and guarantees that the distance
+between T0 and T does not exceed /C15.
+3R EFERENCE SET CONSTRUCTION
+In this section, we propose three methods to build a compact
+and expressive reference set, which is relatively stable and
+do not require frequent updates to compress new data. Fig. 2
+shows a training trajectory set, in which each trajectory sam-
+ple is labeled by TðjÞ
+i indicating the jth sample of trajectory
+Ti. Besides, the ﬁrst sample of each trajectory is companied
+by a number that indicates the start time stamp. We assume
+the sampling interval is 1 time unit. For instance, Tð2Þ
+2 is the
+second sample of T2 whose time stamp is 3.
+3.1 Frequent Pattern-Based Approach (FPA)
+Previous studies have shown that trajectories of moving
+objects often follow certain patterns, such as commuter pat-
+terns, peak/off peak patterns, weekend patterns, etc. There-
+fore a natural thought is to leverage these frequent patterns
+for building a reference set. Given a trajectory dataset, its
+frequent pattern is a set of sub-trajectories of which the occur-
+rence frequencies exceed a certain support threshold. Inspired
+by [15], we ﬁrst introduce calculating point and calculating tra-
+jectory to discretize trajectories into sequential data and then
+apply Sequential Pattern Mining algorithms [16] to ﬁnd fre-
+quent sub-trajectories. Speciﬁcally, given a sample point set
+P¼f p1;p 2;: : : ;png, pi is called a calculating point a ifjpj:x/C0
+pi:xj/C20 /C15s andjpj:y/C0 pi:yj/C20 /C15s.T h e na l lpj can be represented
+by a. A calculating trajectory is a sequence formed by the cal-
+culating points chronologically. The following steps are per-
+formed to ﬁnd all of the frequent sub-trajectories:
+1) Find all calculating points and calculating trajectories.
+2) Given the minimum support threshold, the frequent
+calculating points are obtained by scanning all calcu-
+lating points.
+3) Remove non-frequent calculating points, and obtain
+frequent calculating sub-trajectories.
+4) Remove the frequent calculating sub-trajectories
+who is sub-trajectories of another frequent calculat-
+ing trajectories.
+5) Return all the frequent sub-trajectories.
+3.2 Redundancy Reduction Approach
+Since only using frequent patterns may result in low coverage,
+we next present two variant methods to achieve higher cover-
+age and reduce redundancy (to some extent) simultaneously.
+3.2.1 Segment Redundancy Reduction (SRR)
+Given a training trajectory set, we aim to extract a set of non-
+redundant sub-trajectories. First we deﬁne redundant seg-
+ment in below,
+Deﬁnition 5 (Redundant Segment). Given a minimum
+length thresholdh and a distance threshold/C15s, two sub-trajectories
+(segments) with the same number of samples, i.e., Tði;iþmÞ
+a and
+Tðj;jþmÞ
+b , are said to overlap with each other if m/C21h and their
+maximum pairwise distance dmax = max0/C20k/C20m dðTa:piþk;
+Tb:pjþkÞ/C20 /C15s. If a sub-trajectory s overlaps with any existing
+sub-trajectory in a reference set R, s is called a redundant
+segment.
+h is to avoid the existence of too many short segments.
+The basic idea of our approach is to eliminate all the redun-
+dant segments of training trajectories and use remaining
+segments as the reference set.
+3.2.2 Trajectory Redundancy Reduction (TRR)
+The reference set constructed by SRR algorithm may end up
+with too many short segments if h is too small, or too many
+whole trajectories otherwise (since it gets harder to identify
+long segment overlap). We present an alternative approach
+to reduce redundancy by treating each trajectory as atomic,
+i.e., either use the entire one or nothing. The redundant tra-
+jectory is deﬁned as follows:
+Deﬁnition 6 (Redundant Trajectory). Given an overlap
+threshold u, a distance threshold /C15s, a trajectory T is called
+redundant if the overlap portion between T and R, denoted as
+LðT; RÞ, exceeds u, where LðT; RÞ is calculated as the portion of
+samples in T that are sufﬁciently close to any samples in R, i.e.,
+LðT; RÞ¼ jp2 Tj9q2 R; dðp; qÞ/C20 /C15sj
+jTj > u: (1)
+The TRR algorithm checks every training trajectory T
+and calculates the overlap portion with R. If the value is
+below u, T is added into R as a reference trajectory.
+3.3 Compression-Based Approach (CA)
+As the ultimate goal of building a reference set is to achieve
+high compression ratio, we can compress a training trajec-
+tory against the current reference set with the spatial com-
+pression algorithm proposed in the following section and
+record the compression ratio. If the ratio is high enough,
+that means the training trajectory can be well described by
+existing reference trajectories, i.e., it is redundant; other-
+wise, it is non-redundant. The non-redundant training tra-
+jectory will be added into the current reference set.
+4S PATIAL COMPRESSION
+In this section, ignoring the time information, we compress
+a given trajectory using as few reference trajectories as pos-
+sible to minimize the space cost.
+Fig. 2. Running example.
+2230 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 32, NO. 11, NOVEMBER 2020
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+4.1 Matchable Reference Trajectory
+We will ﬁrst introduce matchable reference trajectory – a basic
+concept that will be used throughout our algorithms.
+Deﬁnition 7 (Matchable Reference Trajectory (MRT)).
+Given a sub-trajectory Tði;jÞ and a spatial deviation threshold
+/C15s, its matchable reference trajectory set, denoted as MðTði;jÞÞ,
+includes all the reference sub-trajectories with less-than- /C15s
+MaxDTW distance with Tði;jÞ, i.e.,
+MðTði;jÞÞ¼
+n
+Tðk;gÞ
+/C12/C12/C12 T2 R; 1/C20 k/C20 g/C20j Tj;
+MaxDTWðTði;jÞ; Tðk;gÞÞ/C20 /C15s
+o
+:
+(2)
+Here each MRT Tðk;gÞ is recorded as a triplet ðT:id; k; gÞ
+(costing 8 bytes). To retrieve the MRTs, we propose an efﬁ-
+cient method based on the following observation.
+Lemma 1. Any sub-trajectory of the MRT of Tði;jÞ is also an
+MRT of sub-trajectory of Tði;jÞ.
+The proof is directly from the property that MaxDTW dis-
+tance between longer sequences upper bounds their sub-
+sequences. Therefore the MRT set of Tði;jÞ can be more easily
+derived by joining the MRT sets of its sub-trajectories.
+Algorithm 1 is proposed based on this intuition. First, the
+MRT sets of all the length-2 sub-trajectories is obtained and
+added to a hash set MðTði;jÞÞ (lines 1-2). Then for each length-
+n (2 <n /C20j Tj) sub-trajectory Tði;jÞ, we check if existing
+MRT of Tði;j/C0 1Þ and Tðj/C0 1;jÞ can also be the MRT of Tði;jÞ (lines
+6-9), and verify if a longer MRT can be formed for Tði;jÞ by
+joining MðTði;j/C0 1ÞÞ and MðTðj/C0 1;jÞÞ (lines 10-11). The
+algorithm can be terminated early if we ﬁnd the MRT sets of
+all length- n sub-trajectories are empty since all longer sub-
+trajectories will not have MRT based on Lemma 1. Given
+/C15s¼ 0:9; h¼ 1 and the reference set generated by SRR
+algorithm previously, i.e., R¼f T1;T 2;Tð3;15Þ
+3 ;T 4;T 5;T 6;T 7g,
+Fig. 3 illustrates the MRTs for T , to name a few,
+MðTð2;9ÞÞ¼f Tð1;8Þ
+2 g, MðTð10;15ÞÞ¼f Tð6;14Þ
+4 ;Tð7;12Þ
+5 g.
+Algorithm 1. Matchable Reference Trajectory Search
+Input: T , R, /C15s
+Output: M
+1 for each Tði;iþ1Þ2 T do
+2 MðTði;iþ1ÞÞ MRT set for segment Tði;iþ1Þ;
+3 for n 3 tojTjdo
+4 for each length-n sub-trajectory Tði;jÞ2 T do
+5 for Tðm;nÞ
+a ; Tðs;tÞ
+b 2 MðTði;j/C0 1ÞÞ;MðTðj/C0 1;jÞÞ do
+6 if MaxDTWðTði;jÞ; Tðm;nÞ
+a Þ/C20 /C15s then
+7 Add Tðm;nÞ
+a into MðTði;jÞÞ;
+8 if MaxDTWðTði;jÞ; Tðs;tÞ
+b Þ/C20 /C15s then
+9 Add Tðs;tÞ
+b into MðTði;jÞÞ;
+10 if a¼ b and n¼ sthen
+11 Add Tðm;tÞ
+a into MðTði;jÞÞ;
+12 if no length-n sub-trajectory has MRT then
+13 Break;
+14 return M;
+Discussion. here we brieﬂy discuss the applicability of our
+framework to other trajectory similarity measure. Since the
+correctness of our following algorithms rely on Lemma 1,
+which states the sub-structure optimality in MRT, we only
+need to examine whether the derived MRT (from Deﬁnition 7)
+based on a given trajectory similarity measure satisﬁes
+Lemma 1 or not. Obviously, our framework can be easily
+adapted to those distance aggregation based trajectory simi-
+larity measure such as euclidean Distance (ED), Edit Distance
+with Projections (EDwP) [17], Dynamic Time Warping [14]
+and its variants as they all satisfy Lemma 1. However, the gen-
+eralization to Longest Common Subsequence (LCSS) [18], Edit
+distance with Real Penalty (ERP) [19] and Edit Distance on
+Real sequences (EDR) [20] is not straightforward since they
+are count-based similarity measure, which means a sub-
+trajectory of MRT may not meet the similarity threshold
+any more.
+4.2 Greedy Spatial Compression
+Once the MRT set is obtained, a natural thought is to process
+the given trajectory in its chronological order and compress
+the longest possible sub-trajectory with its MRT (selecting an
+arbitrary MRT if multiple longest MRTs exist), until the last
+sample point has been reached. This approach is called
+Greedy Spatial Compression (GSC) algorithm since it seems
+not a global strategy to combine MRTs in order to achieve
+the minimal storage cost. However, we will prove later it
+also yields space optimal compressed trajectory.
+Consider the example in Fig. 3. With GSC algorithm, we
+ﬁrst compress Tð1;3Þ with Tð12;14Þ
+1 since it is the ﬁrst longest
+sub-trajectory with non-empty MRT set. Then the remaining
+part of T are represented by Tð3;8Þ
+2 , Tð6;15Þ
+4 , Tð17Þ, Tð8;10Þ
+7
+respectively, resulting in the space cost of 40 bytes, i.e.,
+25 percent of its original space (160 bytes).
+4.3 Optimal Spatial Compression
+In the sequel, we propose a dynamic programming algo-
+rithm, called Optimal Spatial Compression (OSC), that aims
+to minimize the required storage size for T0. Speciﬁcally,
+given a trajectory T and its MRT set MðTÞ, we deﬁne FT½i/C138as
+the minimum storage size needed for compressing Tð1;iÞ, and
+T0ð1;iÞ as the corresponding compressed sub-trajectory to
+achieve this optimum storage. FT½i/C138can be derived by the fol-
+lowing recursive formula shown in Equation (3).
+FT½i/C138¼ 0i f i¼ 0
+min1/C20j/C20i^MðTðj;iÞÞ6¼;fFT½j/C0 1/C138þ8g otherwise
+/C26
+;
+(3)
+where the MRT set of single sample point, i.e., MðTði;iÞÞ,i s
+manually set to non empty.
+It is trivial FT½0/C138¼0 when T¼; , i.e., i¼ 0. When i> 0,
+FT½i/C138is computed by picking the minimum of: 1) the opti-
+mal storage cost of sub-trajectory T0ð1;j/C0 1Þ, i.e., FT½j/C0 1/C138, plus
+the storage (8 bytes) for an MRT of sub-trajectory Tðj;iÞ if
+MðTðj;iÞÞ6¼; when 1/C20 j<i ; and 2) the optimal storage
+cost of sub-trajectory T0ð1;i/C0 1Þ, i.e., FT½i/C0 1/C138, plus the storage
+(8 bytes) of original sample point pi2 T when j¼ i.
+With Equation (3), now we can compute the minimum
+storage size of compressed trajectory, which is presented in
+Algorithm 2. Note that we introduce another notation pre½i/C138
+for recording the last-to-ﬁrst sample points having been com-
+pressed before achieving FT½i/C138to facilitate the reconstruction
+of the compressed trajectory T0 with minimum storage size.
+It ﬁrst initializes T0¼ null and FT½0/C138¼0 (lines 1-2). Then the
+algorithm processes all points of T in the sampling order
+ZHENG ET AL.: REFERENCE-BASED FRAMEWORK FOR SPATIO-TEMPORAL TRAJECTORY COMPRESSION AND QUERY PROCESSING 2231
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+from 1 tojTj, where each recursion starts with initializing the
+minimal storage size to the whole storage of T , i.e., 8jTj, and
+computes FT½i/C138, pre½i/C138according to Equation (3) (lines 3-9).
+Finally, it presents the procedure of construction T0 from
+table pre (lines 10-17). It is easy to analyze the complexity of
+Algorithm 2 is OðjTj2Þ. Taking Fig. 3 as a case, we can ﬁnally
+get FT½20/C138¼40 with Tð1Þ, Tð1;8Þ
+2 , Tð7;12Þ
+5 , Tð13;14Þ
+6 , Tð8;10Þ
+7 com-
+pressing T based on Equation (3). It is worth noting that there
+may be more than one combination of reference trajectories
+and original sample points of T to get the minimum storage
+size of T0.
+Recall the previous example that the compressed trajec-
+tory based on GSC algorithm also costs the same space. We
+show by Lemma 2 that it turns out not to be a coincidence.
+The proof is omitted due to space limit.
+Lemma 2. The compressed trajectory T0 generated by GSC is
+also space optimal.
+5S PATIO-TEMPORAL COMPRESSION
+In this section, we extend spatial compression algorithms
+into spatio-temporal compression algorithms considering
+both spatial and temporal information.
+5.1 Time Correction Cost
+Intuitively, given a spatial deviation threshold /C15s and a tem-
+poral deviation threshold /C15t, if the MaxDTW distance
+between two trajectories Ta and Tb is smaller than /C15s, we also
+need to modify some timestamps of either Ta or Tb such that
+the maximum time difference between the matching sample
+pairs (along the optimal alignment path) does not exceed /C15t
+as well. Each correction of time will incur some extra space,
+denoted by c, to record the position where this correction
+takes place and the new timestamp. Here we set c¼ 4 bytes
+to record the index (15 bits) of corrected samples and time
+(e.g., seconds) of day (17 bits). However, c can be reconﬁg-
+ured to suit different application requirement. The total extra
+space incurred by rectifying the timestamps of Tb to match Ta
+is called Time Correction Cost, denoted as C/C15t
+TaðTbÞ.
+Suppose the matched sample pairs between Ta and Tb
+when calculating their MaxDTW distance areða1;b 1Þ,ða2;b 2Þ,
+...,ðan;b nÞ (n/C20j Taþ Tb/C0 1j). Note that this representation
+contains replication of original samples, i.e., :::; ai;: : : may
+refer to the same sample in Ta, since a sample in TaðTb) can
+match multiple samples in TbðTa). Then the time correction
+cost C/C15t
+TaðTbÞ can be derived by sequentially processing each
+ðai;b iÞð1/C20 i/C20 nÞ, and performing the following actions:
+1) Initialize t¼ 0 to record the most recent correct time-
+stamp of Tb and set b0:t¼ 0, C/C15t
+TaðTbÞ¼ 0;
+2) If jtþ bi:t/C0 bi/C0 1:t/C0 ai:tj/C20 /C15t, update t¼ tþ bi:t/C0 bi/C0 1:t;
+3) Otherwise update t¼ maxfai:t; bi/C0 1:tg, C/C15t
+TaðTbÞ¼ C/C15t
+Ta
+ðTbÞþ c, and record the actual index of bi in Tb and
+the corrected timestamp t.
+When applying the above procedure to our spatio-temporal
+compression, Ta is the given trajectory to be compressed and
+Tb is a MRT of Ta. Reconstruction of Ta’s temporal informa-
+tion with Tb is also straightforward. Scanning from the ﬁrst
+point of Tb, we will replace bi’s timestamp with the corrected
+timestamp if a correction record can be found; otherwise set
+bnew
+i :t¼ bnew
+i/C0 1 :tþ bold
+i :t/C0 bold
+i/C0 1:t.
+Algorithm 2. Optimal Spatial Compression
+Input: T , MðTÞ
+Output: T0
+1 T0 null;
+2 FT½0/C138 0;
+3 for i 1 tojTj do
+4 min 8jTj;
+5 for j 1 to i do
+6 if MðTðj;iÞÞ6¼; and FT½j/C0 1/C138þ8 < min then
+7 min FT½j/C0 1/C138þ8;
+8 pre½i/C138 j/C0 1;
+9 FT½i/C138 min;
+10 i j Tj;
+11 while 0 <i /C20j Tj do
+12 if pre½i/C138 i/C0 1 then
+13 Add pi into T0;
+14 i i/C0 1;
+15 else
+16 Add arbitrary Tðk;gÞ2 MðTðpre½i/C138þ1;iÞÞ into T0;
+17 i pre½i/C138;
+18 returnT0;
+5.2 Greedy Spatio-Temporal Compression
+Similar with GSC algorithm, Greedy Spatio-temporal
+Compression (GSTC) algorithm also iteratively replaces
+the longest sub-trajectory (i.e., Tði;jÞ) with its MRT. How-
+ever, instead of choosing an arbitrary MRT for this longest
+sub-trajectory, GSTC ﬁnds the one with least time correc-
+tion cost in order to minimize the storage for compressed
+trajectory.
+Applying GSTC algorithm on the running example in
+Fig. 3, the selected MRTs and time correction cost are
+detailed in Table 1. Since each original sample point costs 12
+bytes now (with timestamp), the storage cost of T0 is 76 bytes,
+which is 31.67 percent of the original space cost (240 bytes).
+5.3 Optimal Spatio-Temporal Compression
+In this part we extend OSC algorithm to Optimal Spatio-
+temporal (OSTC) algorithm in below.
+Fig. 3. Matchable reference trajectories.
+2232 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 32, NO. 11, NOVEMBER 2020
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+FT½i/C138¼
+0i f i¼ 0
+min
+n
+FT½i/C0 1/C138þ12; min
+1/C20j<i^MðTðj;iÞÞ6¼;
+fFT½j/C0 1/C138þCTðj;iÞðMoptðTðj;iÞÞÞgþ 8
+o
+otherwise
+8
+>><
+>>:
+;
+FT½i/C138records the minimal space needed for compressing
+sub-trajectory Tð1;iÞ. FT½0/C138¼0 deﬁnes the termination condi-
+tion. For i/C211, the algorithm either 1) keeps the original
+sample pi2 T ; or 2) compresses Tðj;iÞ with MoptðTðj;iÞÞ. In the
+ﬁrst case, the ﬁnal space cost is simply the compressed
+space of Tð1;i/C0 1Þ plus 12 bytes (for storing pi). In the second
+case, the space cost is the minimal sum of compressed space
+for Tð1;j/C0 1Þ, time correction cost of MoptðTðj;iÞÞ and space for
+MoptðTðj;iÞÞ (8 bytes). The process of calculating FT½jTj/C138and
+construction of T0 is similar to Algorithm 2 and thus omitted
+here due to space limitation. The time complexity of this
+algorithm is also OðjTj2Þ.
+Taking the example in Fig. 3, we employ OSTC algorithm
+to calculate the proper MRTs and time correction shown in
+Table 2, and achieve the minimal storage size of T0 (i.e.,
+64 bytes), resulting in an approximately 15.79 percent
+reduction compared to GSTC algorithm.
+6Q UERYING COMPRESSED TRAJECTORIES
+The utility of trajectory compression depends on the space
+storage reduction as well as the effective and efﬁcient trajec-
+tory query processing in trajectory databases. The proposed
+OSTC algorithm can compress the raw trajectories in such a
+way that the spatial and temporal information loss can be
+bounded with a deviation threshold, /C15(i.e., /C15s and /C15t), where /C15
+can be set as a very small value. This means the spatial paths
+and timestamps of a raw trajectory can be captured almost
+exactly when being compressed. Therefore we can not only
+directly decompress the compressed trajectories for location
+based service applications, but also use the compressed
+trajectories for various queries without fully decompressing
+the data, in which the error of every point in the partially
+decompressed trajectories is less than /C15. In this section, we
+focus on demonstrating that the compressed trajectories can
+support the range query, a typical trajectory query aiming to
+evaluate spatio-temporal relationships among spatial data
+objects. Informally, in Fig. 4, given a raw trajectory set (i.e.,
+fT1;T 2;T 3;T 4g) and reference trajectory set (i.e., R¼f T1; T2;
+T3g) generated by SRR algorithm previously, range query
+searches for raw trajectories that belong to the speciﬁed
+spatio-temporal region.
+The query processing is to extract qualitative information
+from trajectory databases that contain very large numbers
+of trajectories, whose efﬁciency depends crucially upon an
+appropriate index of trajectories. Due to the unique data
+characteristics of the compressed trajectories (e.g., containing
+sequence of both reference (sub-)trajectories and original
+samples of raw trajectories) and the unique query character-
+istics (e.g., often querying data in an instantaneous/continu-
+ous time window), we design a hybrid spatio-temporal
+index structure by enhancing R-tree [21] with inverted ﬁles.
+The index structure is presented in Section 6.1, followed by
+the detailed query processing in Section 6.2.
+6.1 Hybrid Index
+In this section, we introduce a hybrid index structure, called
+IR-tree [22], based on R-tree with each node enhanced with
+reference to an inverted ﬁle for the reference (sub-)trajectories
+contained in the sub-tree rooted at the node. Compared with
+the query processing over original trajectories (i.e., process
+on original data with R-tree), the query processing over com-
+pressed trajectories has several non-negligible advantages.
+First, since the volume of reference trajectories is much less
+(several orders of magnitude less) than the raw trajectories,
+there will be less dead space in the IR-tree, which in turn is
+more efﬁcient for search. Moreover, the R-tree built using ref-
+erence trajectories is small and compact enough to fully ﬁt
+into memory to avoid physical I/O operations, so that search-
+ing on such an in-memory R-tree is comparatively faster. Our
+experimental study will also verify these advantages.
+In our index structure, a leaf node N contains a number of
+entries in the form of ( T:id; MBR; ifile), in which T:id is an
+identiﬁer that points to the reference (sub-)trajectories or the
+uncompressed part of compressed trajectory, MBR is a rect-
+angle with two spatial dimensions, and ifile is a pointer to
+an inverted ﬁle for the reference (sub-)trajectories being
+indexed. Note that for the uncompressed segments of a
+compressed trajectory, we regard them as new reference
+TABLE 1
+Compressed Trajectory from GSTC
+TM optðTði;jÞÞ Time Correction C/C15t
+T
+Tð1;3Þ Tð12;14Þ
+1 Tð12Þ
+1 :t¼ 1 4
+Tð4;9Þ Tð3;8Þ
+2 Tð4Þ
+2 :t¼ 6, Tð7Þ
+2 :t¼ 8 8
+Tð10;16Þ Tð6;15Þ
+4 Tð6Þ
+4 :t¼ 10, Tð9Þ
+4 :t¼ 12, Tð11Þ
+4 :t¼ 13, Tð13Þ
+4 :t¼ 14 16
+Tð17Þ Tð17Þ 0
+Tð18;20Þ Tð8;10Þ
+7 Tð8Þ
+7 :t¼ 18 4
+TABLE 2
+Compressed Trajectory from OSTC
+TM optðTði;jÞÞ Time Correction C/C15t
+T
+Tð1Þ Tð1Þ 0
+Tð2;9Þ Tð1;8Þ
+2 Tð4Þ
+2 :t¼ 6, Tð7Þ
+2 :t¼ 8 8
+Tð10;15Þ Tð7;12Þ
+5 Tð7Þ
+5 :t¼ 10 4
+Tð16;17Þ Tð13;14Þ
+6 Tð13Þ
+6 :t¼ 16 4
+Tð18;20Þ Tð8;10Þ
+7 Tð8Þ
+7 :t¼ 18 4
+Fig. 4. A set of raw trajectories and reference trajectories.
+ZHENG ET AL.: REFERENCE-BASED FRAMEWORK FOR SPATIO-TEMPORAL TRAJECTORY COMPRESSION AND QUERY PROCESSING 2233
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+trajectories and organize them in the index structure with the
+same way as reference trajectories. In this way, a single top-
+down traversal in this uniﬁed IR-tree can cover both com-
+pressed and uncompressed parts simultaneously. Taking T4
+in Fig. 4 as an example, T4 can be represented by ðTð1;4Þ
+3 ;
+Tð9;14Þ
+1 ;Tð11;13Þ
+4 Þ, where Tð11;13Þ
+4 is the uncompressed part of T4
+that is regarded as a new reference trajectory when building
+the index. The inverted ﬁle consists of a hash table and a set
+of posting lists, wherein the hash table is used to index all the
+distinct reference (sub-)trajectories in N with a lookup time
+complexity of Oð1Þ. For each reference (sub-)trajectory Tði;jÞ
+in the hash table, we maintain a list of ðTðm;nÞ;TðmÞ:t; TðnÞ:tÞ
+triples for the raw trajectories relevant with Tði;jÞ, which are
+sorted by their start timestamp (i.e., TðmÞ:t). Note that the
+timestamps of the compressed part (consisting of a set of
+reference trajectories) in compressed trajectories may not be
+the actual timestamps. Therefore, before constructing the
+inverted lists, we recover the timestamps of the compressed
+part by scanning from the ﬁrst point of each compressed
+sub-trajectory T0
+sub. In particular, the timestamp of T0ðiÞ
+sub will
+be replaced with the corrected timestamp when a correction
+record can be found; otherwise it will be set to T0ði/C0 1Þ
+sub :tþ
+TðiÞ:t/C0 Tði/C0 1Þ:t, where T is the reference trajectory used to
+compress T0
+sub.
+On the other hand, the entries in a non-leaf node N are of
+form (ptr; MBR; ifile), in which ptr is the pointer to the child
+nodes of N, MBR is the minimum bounding rectangle cover-
+ing all the child nodes, and ifile denotes an inverted ﬁle that
+indexes all the distinct reference (sub-)trajectories within N
+in a hash table. The IR-tree can be constructed in the similar
+way of R-tree (i.e., insertion operation) with an exception
+that the inverted ﬁles have to be updated from the leaf to the
+root when a new reference (sub-)trajectory is added.‘
+Fig. 5 presents the illustration of the whole hybrid index
+structure. Given several raw trajectories, fT1;T 2;T 3;T 4g,
+which can be totally represented by a set of reference trajec-
+tories (see Fig. 4), we ﬁrst need to obtain the MBRs of these
+reference trajectories, as shown in Fig. 5a. Subsequently, the
+R-tree is constructed based on the distribution of these refer-
+ence (sub-)trajectories and MBRs in Fig. 5b. The root of the
+R-tree contains three data entries E1, E2 and E3 referring to
+the children nodes N8, N9 and N10 separately. N8 represents
+the minimum bounding rectangle of its children nodes N1
+and N2, and the information of the bounding region is con-
+tained in E1, as with N9 and N10. The spatial objects (i.e., the
+segments of the reference trajectories) are referred by the
+entries of the leaf nodes in R-tree. In Fig. 5c, the invert lists
+are given for each reference (sub-)trajectories that are used
+to compress the given raw trajectories.
+6.2 Query Processing
+After constructing the hybrid index, we next detail the query
+processing based on the index structure. Since it is expensive
+to calculate the spatial relationship (e.g., distance, contain-
+ments, etc) between spatial objects (i.e., a query region and a
+trajectory in the range query), a query processing algorithm
+typically adopts a ﬁlter-and-reﬁnement approach [23]. In
+particular, the ﬁlter step takes relatively cheap computation
+cost to ﬁnd a small set of candidate trajectories that are likely
+to be the results, which is a super set of the result for the orig-
+inal query. Then these candidate trajectories are further proc-
+essed using geometric algorithms (e.g., distance calculation)
+to obtain an actural result at the reﬁnement step.
+Subsequently, we discuss how to efﬁciently process range
+query based on the IR-tree. The range query aims to retrieve
+all the raw trajectories within a speciﬁed spatio-temporal
+Fig. 5. Illustration of index structure.
+2234 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 32, NO. 11, NOVEMBER 2020
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+window, e.g., a sphere of 10 km radius around a location (see
+the circular query region in Fig. 5a) in the time interval,
+f8; 9; 10g. In the ﬁlter step, IR-tree is traversed from the root
+and examines the query region against the MBR in each
+entry visited to check if they are relevant (i.e., contained/
+overlapped) with each other. The range query processing
+ﬁnally ﬁnds all the relevant leaf nodes. Considering the case
+in Fig. 5a and 5b, N10 is visited since its MBR overlaps with
+the Query Region (QR). Then for the same reason N7 is vis-
+ited, and Tð5;10Þ
+3 is found from N7. Finally, we can easily iden-
+tify the candidate trajectory T2 in the speciﬁc time interval
+with the inverted lists in Fig. 5c, and examine whether the
+candidate actually overlaps with the query region in the
+reﬁnement step.
+For other kinds of queries like Trajectory-based query (T-
+query), we can ﬁrst simply convert the queries into range
+query and then apply the ﬁlter-and-reﬁnement approach.
+For instance, given a query trajectory (e.g., T4 in Fig. 4) and a
+spatial threshold /C150, a T-query aims to ﬁnd trajectories that
+satisfy a given distance function to the query trajectory (e.g.,
+the MaxDTW distance between the result trajectory and the
+query trajectory is less than /C150). Speciﬁcally, we can ﬁrst con-
+struct several /C150-MBRs, each of which extends the original
+MBR’s length and width by 2/C150 respectively (as shown in
+Fig. 6). These /C150-MBRs can be regarded as the query regions,
+and then we can process range query based on the IR-tree to
+identify the result trajectories.
+7E XPERIMENT
+In this section, we conduct extensive experiments to vali-
+date the effectiveness of our proposed algorithms. All the
+algorithms are implemented on an Intel(R) Xeon(R) CPU
+E5-2630 v2 @ 2.60 GHZ with 256 GB RAM.
+7.1 Experiment Setup
+We use two real trajectory datasets generated by taxis in
+Beijing and Chengdu respectively over one week. The Beijing
+dataset, denoted by BJ, contains about 2 million trajectories,
+and the Chengdu dataset, denoted by CD, contains about 1.4
+million trajectories. In both datasets, trajectories in one day
+are used as training dataset to construct the reference set,
+and the rest are used to test the performance of different
+compression algorithms under various parameter settings
+with the average performance for one day recorded. The
+ranges and default values (underlined) of all the parameters
+are summarized in Table 3.
+7.2 Experiment Results
+7.2.1 Performance of Reference Set Construction
+We ﬁrst evaluate the performance of reference set construc-
+tion and its impact to spatial compression on BJ dataset. Two
+metrics, Size of Reference Set (the number of sample points in
+the reference set) and Compression Ratio (CR) , are compared
+in this set of experiments, wherein CR measures how much
+space has been saved by compressing raw trajectories. Specif-
+ically, CR is deﬁned as the ratio between space costs of raw
+trajectories and compressed trajectories, i.e., CR¼ spaceðTÞ
+spaceðT0Þ,
+where an original sample point contains its longitude, lati-
+tude and timestamp (costing 12 bytes), an MRT Tðk;gÞ used to
+represent the raw trajectories is recorded as a triplet
+ðT:id; k; gÞ (costing 8 bytes), and a time correction costs 4
+bytes. We compare these two metrics among the following
+methods (speciﬁed in Section 3) by varyingjDRj, /C15s.
+1) FPA: FPA with minimum support 100.
+2) SRR-5: SRR with minimum sub-trajectory length 5.
+3) SRR-20: SRR with minimum sub-trajectory length 20.
+4) TRR-40: TRR with overlap threshold 40 percent.
+5) TRR-70: TRR with overlap threshold 70 percent.
+6) CA-3: CA with compression ratio threshold 3.
+7) CA-5: CA with compression ratio threshold 5.
+Effect ofjDRj. In this set of experiment, we study the effect
+ofjDRj. As shown in Fig. 7a, naturally the sizes of reference
+sets generated from all approaches increase when more
+training trajectories are used. However, we also notice that
+the increase becomes slower when jDRj > 150k since with
+more reference trajectories accumulated there is increasing
+chance that subsequently added trajectories are redundant.
+Among those competing methods, FPA generates the small-
+est reference set while TRR-70 results the largest followed by
+CA-5, SRR-20, TRR-40, CA-3 and SRR-5. It is found that
+the size of reference set almost stops growing beyond 400k,
+which only takes a few megabytes memory space. From
+Fig. 7b, the compression effectiveness heavily depends on
+the size of reference set since a larger reference set normally
+means greater coverage hence better compression ratio.
+Compression algorithm performs the worst on the reference
+set generated by FPA, which aims at capturing the major
+traveling patterns of training trajectories. Even though CA-5
+Fig. 6. A query trajectory and its /C150-MBRs.
+TABLE 3
+Experiment Parameters
+Parameters Values
+No. of trajectories to construct
+reference setjDRj
+50k, 100k, 150k, 200k, 250k
+No. of trajectories to be
+compressed/queriedjDj
+200k, 400k, 600k, 800k
+Spatial deviation threshold /C15s 200m, 400m, 600m, 800m, 1000m
+Temporal deviation threshold /C15t 30s, 60s, 90s, 120s, 150s
+Length of trajectoryjTj 50, 100, 150, 200, 250
+Size of query window Qw 2km, 4km, 6km, 8km, 10km
+Compression ratio CR 2, 4, 6, 8, 10
+Fig. 7. Performance of reference set construction: Effect ofjDRj.
+ZHENG ET AL.: REFERENCE-BASED FRAMEWORK FOR SPATIO-TEMPORAL TRAJECTORY COMPRESSION AND QUERY PROCESSING 2235
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+generates a smaller reference set than TRR-70, it has the best
+compression ratio, which implies that the reference set gen-
+erated by CA-5 is of high coverage and low redundancy.
+This is due to the fact that CA directly optimizes the com-
+pression ratio during the construction of reference set while
+SRR and TRR try to minimize the redundancy.
+Effect of /C15s. Next we study the effect of /C15s. In Fig. 8a, the
+sizes of reference sets decrease with the increase of /C15s, since
+/C15s affects the granularity of patterns for FPA and the judg-
+ment of redundant trajectories for other approaches. Greater
+/C15s means more trajectories become redundant, which in turn
+results in smaller reference set. On the compression ratio
+aspect, Fig. 8b demonstrates that as /C15s increases the com-
+pression performance improves in spite of smaller reference
+set since a given trajectory has more chance to match fewer
+but longer reference trajectories.
+7.2.2 Performance of Compression Algorithms
+In this part we evaluate the effectiveness ( compression ratio )
+and efﬁciency ( running time ) of the proposed compression
+algorithms, namely GSC, OSC, GSTC and OSTC, based
+on the same reference set generated by compress-based
+approach on both trajectory datasets (i.e., BJ and CD data-
+sets). Moreover, we also imp lement two representative
+spatio-temporal compression algorithms, namely Normal
+Douglas-Peucker (NDP) algorithm based on SED [1] (a spa-
+tial trajectory simpliﬁcation algorithm with synchronous
+euclidean distance) and PRESS [10] (a spatial-temporal tra-
+jectory compression algorithm with the constraint of road
+network), as our competitors. For NDP, we deﬁne /C15s as the
+maximal allowed SED between a raw trajectory and its com-
+pressed trajectory. Since the spatial compression component
+of PRESS is lossless, we use /C15s and /C15t to represent the error
+metrics, TSND and NSTD, in the temporal compression
+component, respectively.
+Effect of /C15s. As expected, compression ratio of all algo-
+rithms gradually increases as /C15s grows (see Fig. 10a and 10c).
+Naturally, GSC and OSC achieve the best compression ratio,
+since they do not consider temporal information. The result
+also veriﬁes our previous lemma that GSC and OSC have the
+same power in terms of compression ratio. Moremore, the
+compression ratio of OSTC and GSTC grows faster than that
+of PRESS and NDP, showing more beneﬁts as /C15s increases.
+OSTC achieves the best compression ratio amongst all
+spatio-temporal compression methods, conﬁrming the opti-
+mality of our proposed algorithm. In terms of running time
+in Fig. 10b and 10d, NDP is fastest and almost not affected by
+/C15s, while OSTC is most time-consuming. The running time of
+our proposed algorithms increase since a greater j/C15sj results
+in more MRT enumerations during the compression. PRESS
+is also affected byj/C15sj since it is related to the angular search
+region during bounded temporal compression. Moreover,
+GSTC (OSTC) runs slower than GSC (OSC) because of the
+extra time cost for obtaining the optimal MRT.
+Effect of /C15t. Obviously, as depicted by Fig. 10a and 10c,
+NDP, GSC and OSC are not affected by /C15t since they do not
+consider temporal information at all. For GSTC and OSTC, a
+smaller /C15t means more time stamps of the MRTs are likely to
+violate the temporal constraint, leading to more time correc-
+tion cost, which explains the increasing trend of compression
+ratio as /C15t grows. In addition, the compression ratios of OSTC
+and GSTC are very close and both outperform PRESS and
+NDP constantly by a large margin. When it comes to efﬁ-
+ciency in Fig. 10b and 10d, none of the approaches except
+PRESS is affected by /C15t, which is natural for GSC, OSC and
+NDP. As to GSTC and OSTC, /C15t affects the number of time
+stamps to be rectiﬁed but the total number of time stamps to
+be checked remains the same. The efﬁciency of PRESS slightly
+decreases with /C15t as its angular search region increases.
+Effect ofjTj. To study the effect of the length of trajectory,
+we select ﬁve groups of trajectories from the test dataset,
+each including 10000 trajectories with about 50, 100, 150,
+200, 250 samples respectively and record the average com-
+pression ratio and running time for each group. In Fig. 11a
+and 11c, the compression ratios of all methods increase
+withjTj, as longer trajectories tend to have more redundant
+samples hence there are more room to improve the com-
+pression ratio. Regardless of jTj, proposed methods of
+REST framework well outperform their competitors con-
+stantly. As illustrated in Fig. 11b and 11d, the running time
+of all methods increase with the length of trajectory, while
+the growth of computational cost for OSTC and OSC is rel-
+atively faster due to the quadratic complexity with respect
+Fig. 8. Performance of Reference Set Construction: Effect of /C15s.
+Fig. 10. Performance of compression algorithms: Effect of /C15t.
+Fig. 9. Performance of compression algorithms: Effect of /C15s.
+2236 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 32, NO. 11, NOVEMBER 2020
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+to jTj when deriving the optimal storage cost based on
+dynamic programming.
+Reconstruction Error Analysis . Furthermore, to evaluate
+the accuracy of trajectory compression, we adopt two meas-
+ures, MaxDTW-based and Average Synchronous euclidean
+Distance [1] (ASED)-based spatial error, which are respec-
+tively quantiﬁed by the MaxDTW distance and average
+euclidean distance between a raw trajectory and its corre-
+sponding decompressed trajectory. The reason we adopt
+ASED is that the decompressed trajectory may have differ-
+ent length with its raw correspondence. Due to space limit,
+we only show the experimental results of BJ dataset. Since
+PRESS is spatially lossless, we only compare our compres-
+sion algorithms and NDP by varying /C15s andjTj. Fig. 12a
+shows that all our methods have the similar performances
+with respect to /C15s. This is expected as these methods apply
+the same error metric (i.e., MaxDTW) during spatial com-
+pression. Besides, the spatial error of NDP is higher than
+that of our methods, demonstrating the superiority of our
+methods. In terms of ASED-based spatial error in Fig. 12b,
+NDP performs better than our methods because it adopts
+synchronous euclidean distance when compressing trajecto-
+ries. From Fig. 12c and 12d we can see that the spatial errors
+of all approaches have a growing tendency asjTj is enlarged
+since a longer trajectory has more chance to deviate from its
+corresponding decompressed trajectory.
+7.2.3 Performance of Query Processing
+In the ﬁnal set of experiments, we evaluate the effectiveness
+(memory cost of index ) and efﬁciency ( running time) of the fol-
+lowing methods for processing range queries by varying
+the number of trajectories (to be queried) jDj on BJ dataset,
+the size of query windowjQwj and compression ratio CR:
+1) Range query processing on raw trajectories with spa-
+tial index is denoted as SI. This approach of query
+processing is creating spatial index (i.e., R-tree) on the
+original trajectories to speed up the query processing.
+2) Range query processing on partially decompressed
+trajectory data is denoted as SI-IL.T h i sm e t h o dt a k e s
+IR-tree as the spatial index for compressed trajectories.
+In order to compare the performance of the above two
+approaches for range query processing, we randomly gener-
+ate 103 queries on test dataset (i.e., the trajectory set to be
+queried) and record the total running time. These queries
+are process in the raw trajectories and compressed trajecto-
+ries (generated by OSTC) respectively.
+Effect ofjDj. To study the scalability of the algorithms, we
+generate 5 datasets containing from200 k to 1000 k trajectories
+by random selection from the original trajectory set. Then we
+run experiments on these ﬁve datasets, the results of which
+are depicted in Fig. 13. As shown in Fig. 13a, the memory
+cost of SI increases as the size of trajectory dataset is enlarged
+since its index is mainly established on these trajectories,
+while SI-IL keeps a constant memory cost when enlarging
+jDj due to the fact that its index is mainly established with
+the reference set whose size is stable. When referring to the
+running time in Fig. 13b, as expected, though the running
+time increase as the number of trajectories increases, our
+proposed algorithm scales well with the size of the dataset
+generally.
+Effect of jQwj. Subsequently, we study the effects of the
+size of query windowjQwj, the radius of circular query win-
+dow, by changing it from 2 km to 10 km. Not surprisingly,
+as we can see from Fig. 14, SI-IL signiﬁcantly outperforms
+SI for all values of jQwj in terms of both memory cost and
+runtime. For memory cost, SI and SI-IL keep a constant cost
+asjQwj increases since the number of trajectories used to
+construct the index is stable, which is demonstrated in
+Fig. 14a. For efﬁciency, the performances of both algorithms
+deteriorate with the increasing size of query window (see
+Fig. 14b). This is because statistically the relevance of a tra-
+jectory will be affected by more points as jQwj increases. In
+other words, more nodes of the R-tree overlap with the
+larger query window and need to be examined. Besides, we
+also notice that the running time of SI-IL is far less than that
+of SI, which testiﬁes the superiority of SI-IL.
+Effect of CR. In the ﬁnal experiments, we investigate how
+the compression ratio CR affects the performance of our
+proposed SI-IL method. We choose 5 groups of trajectories
+whose compression ratios are approximately equal to 2, 4,
+6, 8, 10 respectively. Generally, a large CR means that most
+Fig. 11. Performance of compression algorithms: Effect ofjTj.
+Fig. 12. Spatial error of compression algorithms.
+Fig. 13. Performance of query processing: Effect ofjDj.
+Fig. 14. Performance of query processing: Effect ofjQwj.
+ZHENG ET AL.: REFERENCE-BASED FRAMEWORK FOR SPATIO-TEMPORAL TRAJECTORY COMPRESSION AND QUERY PROCESSING 2237
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+part of the raw trajectory can be compressed by the reference
+(sub-)trajectories while a small CR means more original sam-
+ples of the trajectory are kept for representing it when being
+compressed. From Fig. 15a we can see that, SI-IL approach
+performs badly when CR is small (i.e., CR < 3:5), which
+consumes more memory than SI, since SI-IL has to construct
+a complicated index structure for a large number of original
+samples of the trajectories that are used to represent the tra-
+jectories. However, when CR/C216, the memory cost remains
+relatively small and unchanged. This may be due to the fact
+that the raw trajectories can be almost compressed by the ref-
+erence (sub-)trajectories and the index can be only con-
+structed on the reference (sub-)trajectories. Besides, Fig. 15b
+illustrates SI-IL is consistently more efﬁcient than SI, show-
+ing the beneﬁts of our proposed method.
+8R ELATED WORK
+8.1 Trajectory Compression
+The existing trajectory compression algorithms can be clas-
+siﬁed into two categories: 1) spatial compression; 2) spatio-
+temporal compression.
+Spatial compression algorithms treat trajectories as poly-
+lines. For example, Douglas-Peucker algorithm [2] is a classic
+line generalization approach that uses a perpendicular dis-
+tance threshold to reduce the number of points. As DP algo-
+rithm is simple and feasible, a variety of applications have
+been proposed [24] to speed up DP algorithm. Bellman’s
+algorithm [3] ﬁts a ﬁnite number of line segments to a curve
+based on dynamic programming, preserving the most essen-
+tial spatial features. Due to the pure geometric nature, the
+above algorithms cannot be applied when the temporal
+information of trajectories also matters.
+Taking the temporal component of trajectories into
+account, Sliding Window Algorithm [6] and Opening Win-
+dow Algorithm [1], [25] are designed to keep spatio-temporal
+information of a trajectory within a sliding window to com-
+press it. Muckell et al. introduce a heuristic method called
+SQUISH [7], using a priority queue where the priority of
+each point is deﬁned as an estimate of the error that the
+removal of that point would introduce, to compress trajecto-
+ries. Recently, a lossless path compressor in road network is
+developed in [26], namely Minimum Entropy Labeling,
+which guarantees a theoretic bound and achieves practically
+high spatio-temporal compressibility. [27] presents a com-
+pressed data structure for moving object trajectories, where
+the compressed trajectories can be represented as sequences
+of road edges. Song et al. develop a framework, PRESS [10],
+that separates a given trajectory in a road network into spatial
+path and time sequence components. These two components
+are then compressed by Hybrid Spatial Compression algo-
+rithm and error Bounded Temporal Compression algorithm
+respectively, achieving spatial lossless and temporal error-
+bounded compression. However, the pre-computation and
+storage of all-pair shortest paths and most frequent paths
+require a stable road network and large memory space to be
+available, which limits its applied scenarios.
+8.2 Trajectory Index and Query
+As a fundamental trajectory data manipulation, trajectory
+query is becoming crucial. Building efﬁcient spatio-temporal
+index structures on trajectories can signiﬁcantly facilitate
+query processing in trajectory databases. Koide et al. propose
+a novel spatio-temporal index structure for Network-
+Constrained Trajectories (NCTs), namely Sufﬁx-array-based
+Network-constrained Trajectory index [28]. Then they
+further design a compressed-index method for NCTs by con-
+verting NCTs into a trajectory string, in which Relative
+Movement Labeling and FM-index are incorporated to accel-
+erate the query processing [27]. However, the above existing
+work targets network-constrained data and uses this charac-
+teristic to improve the efﬁciency of query processing and the
+accuracy of the query results. Effective index structures [19],
+[29], [30], [31] are built to manage trajectories in euclidean
+space and support high performance trajectory queries,
+among which R-tree [21] is the most common index adopted
+to accelerate the query processing. Here, we also process the
+trajectory query over an R-tree index of all the reference
+(sub-)trajectories. Notice that we do not consider the STR-
+tree or TB-tree [29] for trajectory index since they focus more
+on trajectory preservation and leave other spatial properties
+like spatial proximity aside, while in the our problem, the R-
+tree index is only for fast retrieval of nearest trajectories.
+For trajectory query, a typical one asks for the informa-
+tion against spatio-temporal relationships between trajecto-
+ries and other spatial data objects, i.e., points, regions and
+trajectories [23]. For instance, Chen et al. propose k-Path
+Nearest Neighbor ( k-PNN) query to return the k-NN with
+respect to shortest path connecting a given point (i.e., a des-
+tination); SETI [32] and PA-tree [33] are designed for range
+queries which seek to ﬁnd all trajectories that intersect a
+spatial region; and SECONDO [34] and TrajStore [35] are
+developed for performing regular k-NN queries on trajecto-
+ries using the euclidean distance.
+9C ONCLUSION AND FUTURE WORK
+In this paper we propose a novel data-driven framework,
+called REST, to compress the spatio-temporal information of
+trajectory data. In order to achieve high effectiveness and
+efﬁciency, we addressed a few challenges by proposing dif-
+ferent strategies to construct a compact but expressive refer-
+ence set, and designing efﬁcient and optimal algorithms to
+represent a given trajectory with selected matchable refer-
+ence trajectories. To the best our knowledge, it is the ﬁrst
+data-drive approach to compress trajectories in uncon-
+strained space with both spatial and temporal dimensions
+considered. In addition, as the compressed trajectories are in
+the form of sequence of reference trajectories and original
+samples, we develop an effective index structure to support
+efﬁcient query processing over compressed trajectories with-
+out full decompression. Extensive empirical study based on
+real trajectories dataset also conﬁrms the superiority of our
+Fig. 15. Performance of query processing: Effect of CR.
+2238 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 32, NO. 11, NOVEMBER 2020
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+proposed framework over the state-of-the-art approaches in
+terms of compression ratio, efﬁciency and space cost.
+ACKNOWLEDGMENTS
+The work is supported by the National Natural Science Foun-
+dation of China (Grant No. 61532018, 61836007, 61832017,
+61772356 and 61872258). Kai Zheng and Yan Zhao contrib-
+uted equally to this work.
+REFERENCES
+[1] N. Meratnia and A. Rolf, “Spatiotemporal compression techniques
+for moving point objects,” inProc. Int. Conf. Extending Database Tech-
+nol., 2004, pp. 765–782.
+[2] D. H. Douglas and T. K. Peucker, “Algorithms for the reduction of
+the number of points required to represent a digitized line or its
+caricature,” Int. J. Geographic Inf. Geovisualization , vol. 10, no. 2,
+pp. 112–122, 1973.
+[3] R. Bellman, “On the approximation of curves by line segments
+using dynamic programming,” Archives Internal Med., vol. 4, no. 6,
+1961, Art. no. 284.
+[4] R. Lange, F. D €urr, and K. Rothermel, “Efﬁcient real-time trajectory
+tracking,” VLDB J., vol. 20, no. 5, pp. 671–694, 2011.
+[5] J. Liu, K. Zhao, P. Sommer, S. Shang, B. Kusy, and R. Jurdak,
+“Bounded quadrant system: Error-bounded trajectory compres-
+sion on the go,” in Proc. Int. Conf. Data Eng. , 2015, pp. 987–998.
+[6] E. Keogh, S. Chu, D. Hart, and M. Pazzani, “An online algorithm
+for segmenting time series,” in Proc. IEEE Int. Conf. Data Mining ,
+2001, pp. 289–296.
+[7] J. Muckell, J.-H. Hwang, V. Patil, C. T. Lawson, F. Ping, and S. Ravi,
+“Squish: An online approach for gps trajectory compression,” in
+Proc. 2nd Int. Conf. Comput. Geospatial Res. Appl., 2011, Art. no. 13.
+[8] M. Potamias, K. Patroumpas, and T. Sellis, “Sampling trajectory
+streams with spatiotemporal criteria,” in Proc. 18th Int. Conf. Sci.
+Statistical Database Manage., 2006, pp. 275–284.
+[9] G. Trajcevski, H. Cao, P. Scheuermanny, O. Wolfsonz, and
+D. Vaccaro, “On-line data reduction and the quality of history in
+moving objects databases,” in Proc. 5th ACM Int. Workshop Data
+Eng. Wireless Mobile Access , 2006, pp. 19–26.
+[10] R. Song, W. Sun, B. Zheng, and Y. Zheng, “Press: A novel framework
+of trajectory compression in road networks,” VLDB Endowment ,
+vol. 7, no. 9, pp. 661–672, 2014.
+[11] M. C. Gonz /C19alez, C. A. Hidalgo, and A.-L. Barab/C19asi, “Understanding
+individual human mobility patterns,” Nature, vol. 453, no. 7196,
+pp. 779–782, 2008.
+[12] K. Zheng, Y. Zheng, X. Xie, and X. Zhou, “Reducing uncertainty of
+low-sampling-rate trajectories,” in Proc. IEEE 28th Int. Conf. Data
+Eng., 2012, pp. 1144–1155.
+[13] Y. Zhao, S. Shang, Y. Wang, B. Zheng, Q. V. H. Nguyen, and
+K. Zheng, “Rest: A reference-based framework for spatio-temporal
+trajectory compression,” in Proc. SIGKDD, 2018, pp. 2797–2806.
+[14] D. J. Berndt and J. Clifford, “Using dynamic time warping to ﬁnd
+patterns in time series,” in Proc. 3rd Int. Conf. Knowl. Discovery
+Data Mining, 1994, pp. 359–370.
+[15] J. Li, J. Wang, L. Yu, and J. Zhang, “A novel frequent trajectory
+mining method based on gsp,” in Proc. Int. Conf. Web Inf. Syst.
+Mining, 2011, pp. 134–140.
+[16] R. Agrawal and R. Srikant, “Mining sequential patterns,” in Proc.
+11th Int. Conf. Data Eng. , 1995, pp. 3–14.
+[17] S. Ranu, D. P, A. D. Telang, P. Deshpande, and S. Raghavan,
+“Indexing and matching trajectories under inconsistent sampling
+rates,” in Proc. IEEE 31st Int. Conf. Data Eng. , 2015, pp. 999–1010.
+[18] M. Vlachos, D. Gunopoulos, and G. Kollios, “Discovering similar
+multidimensional trajectories,” in Proc. 18th Int. Conf. Data Eng. ,
+2002, pp. 673–684.
+[19] C. Lei and R. Ng, “On the marriage of lp-norms and edit dis-
+tance,” in Proc. 30th Int. Conf. Very Large Data Bases - Vol. 30, 2004,
+pp. 792–803.
+[20] C. Lei, M. T. Ozsu, and V. Oria, “Robust and fast similarity search
+for moving object trajectories,” in Proc. ACM SIGMOD Int. Conf.
+Manage. Data, 2005, pp. 491–502.
+[21] A. Guttman, “R-trees: A dynamic index structure for spatial
+searching,” in Proc. ACM SIGMOD Int. Conf. Manage. Data , 1984,
+pp. 47–57.
+[22] Z. Li, K. C. Lee, B. Zheng, W. Lee, D. L. Lee, and X. Wang, “Ir-tree:
+An efﬁcient index for geographic document search,” IEEE Trans.
+Knowl. Data Eng., vol. 23, no. 4, pp. 585–599, Apr. 2011.
+[23] K. Deng, K. Xie, K. Zheng, and X. Zhou, “Trajectory indexing and
+retrieval,” in Computing with Spatial Trajectories . New York, NY,
+USA: Springer, 2011.
+[24] R. B. McMaster, “A statistical analysis of mathematical measures
+for linear simpliﬁcation,” Amer. Cartographer , vol. 13, no. 2,
+pp. 103–116, 1986.
+[25] J. Muckell, J. H. Hwang, C. T. Lawson, and S. S. Ravi, “Algorithms
+for compressing gps trajectory data: An empirical evaluation,” in
+Proc. 18th SIGSPATIAL Int. Conf. Adv. Geographic Inf. Syst. , 2010,
+pp. 402–405.
+[26] Y. Han, W. Sun, and B. Zheng, “Compress: A comprehensive
+framework of trajectory compression in road networks,” ACM
+Trans. Database Syst., vol. 42, no. 2, pp. 1–49, 2017.
+[27] S. Koide, Y. Tadokoro, C. Xiao, and Y. Ishikawa, “Cinct: Compres-
+sion and retrieval for massive vehicular trajectories via relative
+movement labeling,” in Proc. IEEE 34th Int. Conf. Data Eng. , 2018,
+pp. 1097–1108.
+[28] S. Koide, Y. Tadokoro, and T. Yoshimura, “Snt-index: Spatio-
+temporal index for vehicular trajectories on a road network based
+on substring matching,” in Proc. 1st Int. ACM SIGSPATIAL Work-
+shop Smart Cities Urban Anal. , 2015, pp. 1–8.
+[29] D. Pfoser, C. S. Jensen, and Y. Theodoridis, “Novel approaches to
+the indexing of moving object trajectories,” Proc. 26th Int. Conf.
+Very Large Data Bases , 2000, pp. 395–406.
+[30] B. Zheng, H. Wang, K. Zheng, H. Su, K. Liu, and S. Shang,
+“Sharkdb: An in-memory column-oriented storage for trajectory
+analysis,” WWW J., vol. 21, no. 2, pp. 1–31, 2017.
+[31] K. Zheng, S. Shang, N. J. Yuan, and Y. Yang, “Towards efﬁcient
+search for activity trajectories,” in Proc. IEEE 29th Int. Conf. Data
+Eng., 2013, pp. 230–241.
+[32] V. P. Chakka, A. Everspaugh, and J. M. Patel, “Indexing large tra-
+jectory data sets with seti,” in Proc. CIDR, 2003, pp. 169–180.
+[33] J. Ni and C. V. Ravishankar, “Pa-tree: A parametric indexing
+scheme for spatio-temporal trajectories,” in Proc. Int. Symp. Spatial
+Temporal Databases, 2005, pp. 254–272.
+[34] R. H. Guting, A. Braese, T. Behr, and J. Xu, “Nearest neighbor
+search on moving object trajectories in secondo,” in Proc. Int.
+Symp. Spatial Temporal Databases, 2009, pp. 427–431.
+[35] P. Cudre-Mauroux, E. Wu, and S. R. Madden, “Trajstore: An
+adaptive storage system for very large trajectory data sets,” in
+Proc. IEEE 26th Int. Conf. Data Eng. , 2010, pp. 109–120.
+Kai Zheng received the PhD degree in computer
+science from The University of Queensland, in
+2012. He is a professor of computer science with
+the University of Electronic Science and Technol-
+ogy of China. He has been working in the area of
+spatial-temporal databases, uncertain databases,
+social-media analysis, in-memory computing and
+blockchain technologies. He has published more
+than 100 papers in prestigious journals and confer-
+ences in data management ﬁeld such as SIGMOD,
+ICDE, the VLDB Journal, ACM Transactions and
+IEEE Transactions. He is a member of the IEEE.
+Yan Zhao received the master’s degree in geo-
+graphic information system from the University
+of Chinese Academy of Sciences, in 2015. She
+is currently working toward the PhD degree at
+Soochow University. Her research interests include
+spatial database and trajectory computing.
+ZHENG ET AL.: REFERENCE-BASED FRAMEWORK FOR SPATIO-TEMPORAL TRAJECTORY COMPRESSION AND QUERY PROCESSING 2239
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 
+Defu Lian received the BE and PhD degrees in
+computer science from the University of Science
+and Technology of China (USTC), in 2009 and
+2014, respectively. He is currently a research pro-
+fessor with the University of Science and Technol-
+ogy of China. His main research interests include
+mobile data mining and recommender systems. He
+has published more than 40 papers in journals and
+conferences such as KDD, WWW, IJCAI, and the
+ACM Transactions on Information Systems ,t h e
+IEEE Transactions on Knowledge and Data Engi-
+neering. He also was a reviewer for several journals such as the the IEEE
+Transactions on Knowledge and Data Engineering,t h eACM Transactions
+on Information Systemsand the Knowledge and Information Systems.
+Bolong Zheng received the PhD degree from
+the University of Queensland, in 2017. He is
+currently working as an associate professor with
+Huazhong University of Science and Technology.
+After that, he worked as a postdoctoral research
+fellow with the University of Queensland and Aal-
+borg University. His research interests include
+trajectory querying and mining, social-media
+analysis, spatial-temporal databases.
+Guanfeng Liu received the PhD degree in
+computer science from Macquarie University,
+Australia, in 2013. He is current a lecturer with the
+Department of Computing, Macquarie University,
+Australia. His research interests include graph
+data management, trust computing and social net-
+works. He has published more than 60 papers in
+the most prestigious journals and conferences
+such as IJCAI, AAAI, ICDE, CIKM, the IEEE
+Transactions on Knowledge and Data Engineer-
+ing, the IEEE Transactions on Services Comput-
+ing and ICWS.
+Xiaofang Zhou received the bachelor’s and mas-
+ter’s degrees in computer science from Nanjing
+University, in 1984 and 1987, respectively, and the
+PhD degree in computer science from the Univer-
+sity of Queensland, in 1994. He is a professor
+of computer science with the University of
+Queensland. He is the head of the Data and Knowl-
+edge Engineering Research Division, School of
+Information Technology and Electrical Engineer-
+ing. He is also a specially appointed an adjunct
+professor with Soochow University, China. His
+research is focused on ﬁnding effective and efﬁcient solutions to managing
+integrating, and analyzing very large amounts of complex data for business
+and scientiﬁc applications. His research interests include spatial and multi-
+media databases, high performance query processing, web information
+systems, data mining, and data quality management. He is a fellow of
+the IEEE.
+" For more information on this or any other computing topic,
+please visit our Digital Library at www.computer.org/csdl.
+2240 IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, VOL. 32, NO. 11, NOVEMBER 2020
+Authorized licensed use limited to: Soochow University. Downloaded on April 27,2021 at 03:57:16 UTC from IEEE Xplore.  Restrictions apply. 

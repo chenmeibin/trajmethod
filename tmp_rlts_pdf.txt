@@ -1,0 +1,1272 @@
+Trajectory Simpliﬁcation with Reinforcement
+Learning
+Zheng Wang, Cheng Long, Gao Cong
+School of Computer Science and Engineering, Nanyang Technological University, Singapore
+{wang zheng, c.long, gaocong}@ntu.edu.sg
+Abstract—Trajectory data is used in various applications
+including trafﬁc analysis, logistics, and mobility services. It is
+usually collected continuously by sensors and accumulated at
+a server resulting in big volume. A common practice is to
+conduct trajectory simpliﬁcation which is to drop some points of
+a trajectory when they are being collected (online mode) and/or
+after they are accumulated (batch mode). Existing algorithms
+usually involve some decision making tasks (e.g., deciding which
+point to drop), for which, some human-crafted rules are used. In
+this paper, we propose to learn a policy for the decision making
+tasks via reinforcement learning (RL) and develop trajectory
+simpliﬁcation methods based on the learned policy. Compared
+with existing algorithms, our RL-based methods are data-driven
+and can adapt to different dynamics underlying the problem.
+We conduct extensive experiments to verify that our RL-based
+methods compute simpliﬁed trajectories with smaller errors
+while running comparably fast (and faster in the batch mode)
+compared with existing methods.
+Index Terms —trajectory data, trajectory simpliﬁcation, rein-
+forcement learning
+I. INTRODUCTION
+Trajectory data is a data type that captures traces of mov-
+ing objects such as vehicles, pedestrians, robots, etc. It is
+central to many applications such as urban mobility analysis,
+logistics, transportation, sports games [1], etc. Trajectory data
+is typically generated continuously and collected by remote
+sensors such as GPS devices. One typical scenario is that a
+sensor periodically checks the coordinates and time, which
+corresponds to a time-stamped location (called spatio-temporal
+point or simply point), and stores the point in a buffer. Typ-
+ically, a sensor has a small storage budget, low computation
+capability, and limited network bandwidth. A consequent issue
+is that the buffer would become occupied frequently and the
+workload of transmitting the points is high. In addition, in
+some applications, there could be hundreds of thousands of
+sensors, which collect trajectory data simultaneously. Once the
+trajectory data collected by all these sensors is accumulated at
+a server, the volume would be huge, which has been illustrated
+by several existing studies (see the survey paper [2]). A
+consequent issue is that the huge volume of trajectory data
+would increase the storage cost and more importantly make
+the query processing on the data expensive.
+A common practice that has been used to deal with the
+aforementioned two issues is to conduct trajectory simpliﬁ-
+cation, which essentially is to drop some points of a given
+trajectory and keep the remaining ones as a simpliﬁed tra-
+jectory. Speciﬁcally, in the online mode, the trajectory data
+is inputted point by point and once a point is dropped, it is
+no longer accessible. In the batch mode, the trajectory data
+is inputted completely once and remains accessible during the
+whole course of trajectory simpliﬁcation. The rationale behind
+trajectory simpliﬁcation is two-fold. First, not all points of a
+trajectory carry equal amount of information and some carry
+little or even no information. For example, when an object
+moves along a straight line at a constant speed, all points
+except for the ﬁrst and last ones carry no information and could
+be dropped. Second, with some point dropped, the burden
+on the transmission, storage, and query processing would
+be lowered down signiﬁcantly. In this paper, we consider
+a problem of trajectory simpliﬁcation, which is to drop at
+least a certain number of points (or equivalently to keep at
+most a certain number of points) such that the information
+loss, captured as the “error” of the simpliﬁed trajectory, is
+minimized. We call this problem Min-Error.
+Quite a few algorithms exist for the Min-Error problem
+in the online mode, including STTrace [3], SQUISH [4],
+and SUISH-E [5]. All these algorithms share the idea that
+it maintains a buffer of a certain size and keeps storing points
+in the buffer, and whenever the buffer becomes full, it picks
+one point from the buffer and drops it. In addition, they all
+make the decision on which point to drop by deﬁning some
+“importance value” of each point and always dropping the
+point with the least importance value. Roughly, the importance
+value of a point is deﬁned as some form of error that would
+be introduced when the point is dropped since a smaller
+error means that the point is less important and should be
+dropped. When a point is dropped, the importance values
+of the remaining points should be updated, in which the
+existing algorithms differ from one another. STTrace simply
+re-computes the values, while SQUISH distributes the value
+of a point that has been dropped to its neighboring points (so
+that the importance values would be carried on) and SQUISH-
+E is similar to SQUISH with only some slight reﬁnements on
+the update procedure. As could be noticed, these algorithms
+are mainly based on some human-crafted rules for deciding
+which point to drop.
+In this paper, we propose a reinforcement learning (RL)
+method for the trajectory simpliﬁcation problem in the online
+mode. We treat the trajectory simpliﬁcation problem (in the
+online mode) as one of a sequential decision process, i.e., it
+scans a trajectory sequentially, and whenever the buffer is full,
+it makes a decision on which point to drop. We then model the
+
+process as a Markov decision process (MDP), learn the policy
+for the MDP via a widely-used policy gradient method [6]–
+[8], and develop a trajectory simpliﬁcation method based on
+the learned policy. We call this method RLTS. Compared with
+existing algorithms, our RLTS method computes simpliﬁed
+trajectories with smaller errors, which is mainly due to its data-
+driven nature and also its capability of adapting to different
+dynamics of the inputted points. The RLTS method has the
+time complexity ofO((n−W ) logW ), wheren is the number
+of points in the inputted trajectory and W is the buffer size,
+which is the same as that of existing algorithms STTrace,
+SQUISH, and SQUISH-E.
+We also propose a variant of RLTS, called RLTS-Skip,
+by augmenting the MDP with additional actions of skipping
+points from being scanned. The rationale is that some points
+may carry little information so that they can be dropped
+immediately without being inserted in the buffer when they are
+being scanned, as RLTS does. The beneﬁt is that the efforts of
+deciding and taking actions for these points that are skipped
+are saved and the efﬁciency is boosted. In addition, RLTS-
+Skip accepts a parameter J, which controls the maximum
+number of points that are allowed to be skipped. Therefore,
+RLTS-Skip provides a tunable trade-off between efﬁciency
+and effectiveness with different settings of J. Note that when
+J = 0, RLTS-Skip reduces to RLTS.
+We further investigate the problem under the batch mode,
+which assumes more data access than under the online mode.
+Speciﬁcally, we have access to all points of a trajectory during
+the whole course of trajectory simpliﬁcation in the batch mode,
+while we can only access those points that are stored in the
+buffer in the online mode. With the increased data access,
+we have more options of deﬁning the states of the MDP. We
+investigate three state deﬁnitions, which capture different por-
+tions of the points of a trajectory, and correspondingly develop
+three different categories of algorithms, namely (1) RLTS and
+RLTS-Skip, (2) RLTS+ and RLTS-Skip+, and (3) RLTS++ and
+RLTS-Skip++. RLTS and RLTS-Skip are exactly the same as
+those for the online mode, whose underlying states are deﬁned
+based on those points stored in the buffer only. RLTS+ and
+RLTS-Skip+ are enhanced versions of RLTS and RLTS-Skip,
+respectively, where their states are deﬁned based on all those
+points that have been scanned (including those that are stored
+in the buffer and those that have been dropped). In addition,
+RLTS-Skip+ augments the states further with the information
+of the J points that follow the point that is being scanned.
+RLTS++ and RLTS-Skip++ ultimately consider all points for
+deﬁning states. From RLTS and RLTS-Skip, to RLTS+ and
+RLTS-Skip+, to RLTS++ and RLTS-Skip++, more information
+is captured for deﬁning the states and correspondingly, the
+MDPs become more complex and the methods take more time
+costs. Speciﬁcally, the time complexities of the three categories
+of methods are O((n−W ) logW ),O((n−W )(n′ + logW )),
+O((n−W )(n′ + logn)), respectively, where n′ is the cost
+of computing the value of a point and is bounded by n (in
+practice, n′≤n).
+In summary, our main contribution is as follows. We develop
+a RL-based method for the trajectory simpliﬁcation problem,
+which is the ﬁrst of its kind. The RL-based method achieves
+competitive effectiveness and efﬁciency simultaneously. In
+particular, for the batch mode, the RL-based method out-
+performs all existing approximate methods in terms both
+effectiveness and efﬁciency, under four error measurements,
+across different parameter settings, and on all real datasets
+tested. Furthermore, we propose a variant of RLTS, i.e., RLTS-
+Skip, which runs faster than RLTS and provides a controllable
+trade-off between the effectiveness and efﬁciency. Particularly
+for the batch mode, we investigate three variants of the method
+given the increased data access. Extensive experiments on
+real-life datasets demonstrate that our methods have better
+effectiveness and comparable (or better in the batch mode)
+efﬁciency compared with existing algorithms.
+The rest of paper is organized as follows. We review the
+literature in Section II and give the problem deﬁnition in
+Section III. We introduce our RLTS and RLTS-Skip algorithms
+for the online and batch modes in Section IV and in Section V,
+respectively. We present our experimental results in Section VI
+and ﬁnally conclude our paper in Section VII.
+II. RELATED WORK
+A. Trajectory Simpliﬁcation in Online Mode
+In the online mode, streaming trajectory data is continuously
+collected by sensors and stored in a local buffer. The trajectory
+simpliﬁcation problem is to decide which points to be dropped
+and correspondingly which to be kept in the buffer and sent
+to the server’s side later on. Among the existing studies of
+trajectory simpliﬁcation in the online mode, [3]–[5] target
+the Min-Error problem. In [3], [9], the STTrace algorithm is
+proposed, which processes incoming points one by one and
+for each one, it ﬁrst decides whether to drop it. If so, it moves
+to the next one; and if not, it drops one existing point in the
+buffer, and then inserts the point that is being processed to the
+buffer. The decision making is based on some heuristic values
+deﬁned for the points. In [4], the authors propose the SQUISH
+algorithm and in [5] they propose an enhanced version of
+SQUISH called SQUISH-E. SQUISH and SQUISH-E follow
+the framework of STTrace, but use different deﬁnitions for the
+heuristic values of points. Each of these algorithms has the
+time complexity of O((n−W ) logW ). Our solution differs
+from these methods in that it is based on a policy learned
+via reinforcement learning instead of human-crafted heuristic
+values for decision making.
+Other proposals on the online mode trajectory simpliﬁcation
+do not target the Min-Error problem and are reviewed as
+follows. In [10]–[17], the authors address the problem of
+ﬁnding a simpliﬁed trajectory such that the size is minimized
+while satisfying a given error bound, i.e., a dual problem of the
+Min-Error problem. In [18], the “dead reckoning” technique
+is used for trajectory simpliﬁcation, which predicts the future
+location of a moving object based on the assumption of a
+constant velocity and direction and discards a collected point
+if it deviates from the predicated location signiﬁcantly. In [19],
+the authors propose to perform trajectory simpliﬁcation based
+
+on some topologically persistent features, which indicate the
+importance of points.
+B. Trajectory Simpliﬁcation in Batch Mode
+In the batch mode, all the points in the trajectory that is
+to be simpliﬁed are inputted together and remain accessible
+throughout the simpliﬁcation process. Among those existing
+studies of trajectory simpliﬁcation in the batch mode, [10],
+[20]–[22] study the Min-Error problem. Speciﬁcally, in [20],
+the authors propose a dynamic programming algorithm called
+Bellman. Bellman runs in at least cubic time, which is
+prohibitively expensive for large datasets. In [9], [10], [21],
+the authors explore different approximate algorithms for the
+problem, including Top-Down and Bottom-Up. Top-Down is
+inspired by the traditional Douglas-Peucker [23] algorithm and
+the idea is to start with two points (the ﬁrst one and the last
+one) and then repetitively include a point that has the largest
+error until the number of points reaches the storage budget.
+Top-Down has the time complexity of O(Wn ). Bottom-Up
+starts with all points of the inputted trajectory and repetitively
+drops a point that would introduce the smallest error until the
+number of points left is within the storage budget. Bottom-Up
+has the time complexity of O((n−W )(n′ + logn)), where n′
+is bounded by n. In [22], the authors propose an approximate
+algorithm called Span-Search, which is speciﬁcally designed
+for the error measurement direction-aware distance (DAD).
+Span-Search has the time complexity of O(cn log2n), where
+c is a moderate constant. Again, these methods are mainly
+based on human-crafted rules, while our method is based on
+a learned policy.
+Other trajectory simpliﬁcation methods for the batch mode
+do not target the Min-Error problem and are reviewed as
+follows. In [24], [25] (and the references therein), the authors
+study the dual problem of Min-Error. In [26], the authors
+propose a solution for selecting a subset of most representative
+points from a trajectory. In [27], the authors construct a
+reference trajectory set to support trajectory compression.
+C. Road Network based Trajectory Compression
+Trajectory compression [28]–[33] is a related but different
+problem. It aims to match the GPS points to road segments
+and leverage the knowledge from road networks to achieve
+a higher compression ratio. For example, Li et al [28] study
+uncertain trajectory compression and develop a framework to
+support probabilistic query processing in road networks. Chen
+et al [29] propose an online algorithm for trajectory mapping
+and compression utilizing vehicle heading directions upon the
+underlying road network. This line of research focuses on
+trajectory data that is generated on road networks while our
+work focuses movements in a free space, such as those of
+pedestrians, sports players, animals, etc., which are common
+and have been extensively studied.
+D. Reinforcement Learning
+Reinforcement learning (RL) was proposed to guide agents
+on what actions to take in a speciﬁc environment to maximize
+Fig. 1. A running example.
+a cumulative reward [34], where the environment is generally
+modeled as a Markov decision process (MDP) [35]. In re-
+cent years, RL models have been used successfully to solve
+algorithm problems. For example, Kong et al. [36] explore
+the RL methods for three classic combinatorial optimization
+problems. Wang et al. [37] design RL-based algorithms for
+subtrajectory similarity search. Marcus et al. [38] apply RL for
+join order enumeration. In this paper, we model the trajectory
+simpliﬁcation problem as an MDP and use a popular policy
+gradient method [6]–[8] for solving the problem. To the best
+of our knowledge, this is the ﬁrst deep reinforcement learning
+based solution for trajectory simpliﬁcation.
+III. PRELIMINARIES AND PROBLEM STATEMENT
+The trace of a moving object such as a vehicle or a user
+is usually captured by a trajectory, which corresponds to a
+sequence of time-stamped locations called spatio-temporal
+points (or simply points). Let T =< p1,p 2,...,p n > be a
+trajectory, wherepi is in the form of (xi,yi,ti), meaning that
+a moving object is at location (xi,yi) at timeti. We denote by
+T [i :j] (i≤j) the subtrajectory of T , which starts form point
+pi and ends at point pj, i.e., T [i : j] =< pi,pi+1,...,p j >.
+We denote by d(pi,pj) (1 ≤ i,j ≤ n) the Euclidean
+distance between pi’s location and pj’s location. We deﬁne
+the size of the trajectory T , denoted by |T|, as the number
+of points involved in T , i.e., |T| = n. We denote the line
+segment linking location (xi,yi) and location (xi+1,yi+1) by
+pipi+1. It is interpreted that during the time period [ti,ti+1]
+(1≤ i≤ n− 1), the object moves along the line segment
+pipi+1 at a constant speed from one end to the other and the
+speed is equal to d(pi,pi+1)
+ti+1−ti
+.
+A. Trajectory Simpliﬁcation and Error Measurements
+Any trajectory resulted from T by dropping some points
+(that are neither the ﬁrst nor the last point) corresponds to
+a simpliﬁed trajectory of T . A simpliﬁed trajectory of T ,
+denoted by T′, has the form of < ps1,ps2,...,p sm > where
+m ≤ n and 1 = s1 < s 2 < ... < s m = n. For
+example, in Figure 1, T =< p1,p 2,...,p 6 > is a trajectory
+and T′ =<p 1,p 4,p 6 > is a simpliﬁed trajectory of T .
+Consider the time period [tsj,tsj+1 ] (1≤j≤m−1). Based
+on the simpliﬁed trajectory T′, it is interpreted that the object
+moves along segment psjpsj+1, while based on trajectory T ,
+it is interpreted that the object moves along a sequence of
+segments formed by a sequence of points psj,psj +1,...,p sj+1.
+In other words, segment psjpsj+1 in T′ approximates those
+segments starting at points psj,psj +1,...,p sj+1−1, namely
+
+psjpsj +1,psj +1psj +2,..., psj+1−1psj+1, inT . We say that seg-
+ment psjpsj+1 is an anchor segment of each of the points
+psj,psj +1,...,p sj+1−1. Note each point in trajectory T except
+for pn has exactly one anchor segment in T′. For example,
+in Figure 1, p1p4 approximates a sequence of three segments
+p1p2, p2p3, p3p4 and corresponds to the anchor segment of
+p1, p2 and p3. As could be noticed, there is a discrepancy
+between the interpreted movement based on the simpliﬁed
+trajectory T′ and that based on the original trajectory T , and
+this discrepancy is measured as the error of T′ wrt T , which
+we denote by ϵ(T′).
+Quite a few measurements have been proposed for
+deﬁning ϵ(T′), including (1) synchronized Euclidean dis-
+tance (SED) [3]–[5], [10], (2) perpendicular Euclidean dis-
+tance (PED) [10]–[12], [20], (3) direction-aware distance
+(DAD) [13], [14], [22], [25], and (4) speed-aware distance
+(SAD) [5]. These error measurements share the idea that
+(1) it deﬁnes the error of a segment psjpsj+1 wrt a point
+pi (sj ≤ i < sj+1) which takes psjpsj+1 as its anchor
+segment, which we denote by ϵ(psjpsj+1|pi); (2) it de-
+ﬁnes the error of the segment psjpsj+1, which we denote
+by ϵ(psjpsj+1 ), as the maximum among its errors wrt the
+points that take it as an anchor segment, i.e., ϵ(psjpsj+1 ) =
+maxsj≤i<sj+1ϵ(psjpsj+1|pi); (3) it then deﬁnes the error of
+simpliﬁed trajectory T′ as the maximum error of a segment
+in T′, i.e., ϵ(T′) = max 1≤j≤m−1ϵ(psjpsj+1 ). That is, these
+error measurements, including SED, PED, DAD, and SAD,
+deﬁne ϵ(T′) as follows.
+ϵ(T′) = max
+1≤j≤m−1
+max
+sj≤i<sj+1
+ϵ(psjpsj+1|pi) (1)
+Different measurements use different functions for deﬁning
+ϵ(psjpsj+1|pi) (1≤j≤m− 1,sj≤i<s j+1).
+• SED deﬁnes ϵ(psjpsj+1|pi) as the Euclidean distance
+between pi’s location, i.e., (xi,yi), and the location at
+timeti based on the movement interpreted byT′, i.e.,pi’s
+synchronized location based on T′, which we denote by
+p′
+i. In Figure 1, ϵSED (p1p4|p2) corresponds to d(p2,p′
+2).
+• PED deﬁnes ϵ(psjpsj+1|pi) as the Euclidean distance
+between pi’s location, i.e., (xi,yi), and the location
+on segment psjpsj+1, that is the closest from (xi,yi),
+denoted by p′′
+i . In Figure 1, ϵPED (p1p4|p3) corresponds
+to d(p3,p′′
+3 ).
+• DAD deﬁnes ϵ(psjpsj+1|pi) as the angular difference
+between the direction along segment pipi+1 and that
+along segment psjpsj+1. In Figure 1, ϵDAD(p4p6|p5)
+corresponds to the angle between p4p6 and p5p6.
+• SAD deﬁnes ϵ(psjpsj+1|pi) as the difference between the
+speed of segment pipi+1 and that of segment psjpsj+1.
+In Figure 1, ϵSAD (p4p6|p5) corresponds to |d(p4,p6)
+t6−t4
+−
+d(p5,p6)
+t6−t5
+|.
+B. Problem Deﬁnition
+We study the Min-Error problem as deﬁned below.
+Problem 1 (Min-Error): Given a trajectory T =<
+p1,p 2,...,p n > and a storage budget W , which is an integer,
+the Min-Error problem is to ﬁnd a simpliﬁed trajectory
+T′ =< ps1,ps2,...,p sm > where m ≤ n and 1 = s1 <
+s2 < ... < sm = n such that |T′| ≤W and ϵ(T′) is
+minimized, and ϵ(T′) can be deﬁned by any of those existing
+error measurements including SED, PED, DAD, and SAD.
+The Min-Error problem has two modes, namely the online
+mode and the batch mode, for different application scenarios.
+Online mode. In the online mode, the trajectory to be simpli-
+ﬁed is fed to the system point by point in an online fashion
+and those points that have been dropped during the trajectory
+simpliﬁcation process will no longer be accessible. This mode
+is commonly used in applications such as remote sensing,
+where the sensors collect points from time to time and are
+constrained by storage budget, network bandwidth and energy.
+Batch mode. In the batch mode, all the points in the trajectory
+to be simpliﬁed are fed together, and remain accessible during
+the simpliﬁcation process. This mode is usually used at a
+server’s side and the purpose is to reduce the storage cost (e.g.,
+after the simpliﬁcation, the original trajectory is discarded)
+and/or the query processing cost (e.g., it performs queries on
+the simpliﬁed trajectory data instead of the original data).
+In this paper, we target both the online mode (Section IV)
+and the batch mode (Section V).
+IV. A LGORITHMS FOR ONLINE MODE
+In this section, by Min-Error, we mean the problem in the
+online mode unless speciﬁed otherwise. In the online mode,
+points are inputted one by one in an online fashion, while only
+a buffer with size W is available, i.e., at most W points can
+be retained throughout the trajectory simpliﬁcation process.
+We adopt an existing strategy [3]–[5] that for the ﬁrst W
+points, we store them in the buffer directly and for each
+of the remaining points, since the buffer is already full, we
+drop one point in the buffer to release some space and then
+store the new point in the buffer. Different from those existing
+strategies, which use some human-crafted heuristic values for
+deciding which point to drop when the buffer is full, we
+aim to achieve a more intelligent method for this decision-
+making task. Speciﬁcally, we treat the trajectory simpliﬁcation
+problem as a sequential decision making process and model it
+as a Markov decision process (MDP) [35] (Section IV-A), use
+a policy gradient method [6]–[8] for learning an optimal policy
+for the MDP (Section IV-B), and then develop an algorithm
+called RLTS, which uses the learned policy for the Min-Error
+problem (Section IV-C). In Section IV-D, we present a variant
+of RLTS, called RLTS-Skip, which boosts the efﬁciency of
+RLTS via skipping some points from being scanned.
+A. Min-Error Modeled as an MDP
+We model the Min-Error problem as an MDP, which con-
+sists of four components, namely states, actions, transitions,
+and rewards as deﬁned below.
+1) States: Consider a situation where there are W points
+ps1,ps2,...,p sW in the buffer and a newly inputted point pi
+(i > W) is to be inserted into the buffer next. The task is to
+drop one point from the buffer and then insert the point pi into
+
+the buffer. Conceptually, it is equivalent to the process that we
+ﬁrst append the point pi to the buffer, i.e., the buffer becomes
+ps1,ps2,...,p sW,psW +1, where psW +1 =pi, and then we drop
+one point psj (2≤j≤W ) from the buffer. Note that by the
+deﬁnition of trajectory simpliﬁcation, we are not allowed to
+drop pointps1, i.e.,p1. An intuitive idea is to drop one of those
+points such that the error that is introduced as a consequence
+of the dropping operation is small. If we drop the point psj
+(2≤ j≤ W ), two existing segments psj−1psj and psjpsj+1
+would be destroyed, one new segment psj−1psj+1 would be
+created, and other segments are unchanged. Since the error of
+a simpliﬁed trajectory is determined by those of its segments
+and the error of a segment is further determined by its errors
+wrt the points in the original trajectory that take the segment as
+their anchor segments, the error of the newly created segment
+psj−1psj+1 wrt the point psj , i.e., ϵ(psj−1psj+1|psj ), captures
+the consequence of dropping psj well.
+Motivated by this, we deﬁne for each point psj (2≤ j≤
+W ), a value, denoted by v(psj ), as follows.
+v(psj ) := ϵ(psj−1psj+1|psj ) (2)
+We note that for DAD and SAD, ϵ(psj−1psj+1|psj ) depends
+on segment psjpsj +1. In the online mode, psj +1 may not be
+accessible, and thus we use segment psjpsj+1 instead (i.e., we
+measure the angular and speed difference between segment
+psj−1psj+1 and segment psjpsj+1). A lower value means that
+once the point is dropped, the introduced error tends to be
+smaller and thus it should be dropped with a higher chance.
+Then, we deﬁne the state of the situation, which we denote by
+s, based on the values of the points in the buffer. An immediate
+idea is to incorporate the values of all (W− 1) points psj
+(2≤ j≤ W ) in the buffer for deﬁning the state. However,
+this deﬁnition has two issues. First, since W is an input to
+the problem and for different problem instances, W is usually
+different. With this deﬁnition, the model that is deﬁned for
+one input W would not be usable for other inputs different
+from W . Second, W is typically a moderate to large integer,
+e.g., it could be in thousands. With this deﬁnition, the state
+space would be huge and the model be hard to train.
+We propose to deﬁne the state s as the set containing k
+lowest values, where k (k≤W− 1) is hyper-parameter that
+could be tuned, instead of the set containing all (W−1) values.
+Speciﬁcally, we letπ denote the permutation ofs2,...,s W such
+thatv(pπ(1)),v (pπ(2)),...,v (pπ(W−1)) is a list of the values in
+an ascending order. Then, we deﬁne state s as follows.
+s :={v(pπ(1)),v (pπ(2)),...,v (pπ(k))} (3)
+With this deﬁnition, a state is of a ﬁxed size that is indepen-
+dent from the problem input. In addition, the state space is
+controllable via the parameter k.
+2) Actions: Suppose that there are W + 1 points
+ps1,ps2,...,p sW +1 in the buffer (conceptually) and s =
+{v(pπ(1)),v (pπ(2)),...,v (pπ(k))} is the corresponding state.
+Essentially, the task is to pick a point among ps2,...,p sW
+and drop it. An immediate idea is to deﬁne (W− 1) actions,
+each for a point psj (2≤ j≤ W ), but then there would be
+two issues similar to those when we discuss a straightforward
+method for deﬁning a state, namely (1) the deﬁnition would
+be W -dependent and thus it is not ﬂexible and (2) the action
+space would be large and thus the model is hard to train. In
+fact, it is intuitive to restrict our attention to those points with
+small values since dropping one of these points incurs a small
+consequent error. Therefore, we focus on those points with
+their values maintained in the state, i.e., pπ(1),pπ(2),...,p π(k).
+With all these, we deﬁne an action space containing k
+actions, each meaning to drop a point pπ(j) (1≤ j ≤ k).
+Formally, we deﬁne an action, which we denote by a, as
+follows.
+a :=j (1≤j≤k) (4)
+where the action a =j means that it drops the point pπ(j).
+3) Transitions: Suppose a is an action to drop point psj
+(2≤ j≤ W ). After the action a is taken, W points are left
+in the buffer. When a new point pi, is inserted, we need to
+compute a new state, which we denote by s′, i.e., state s′
+would be the next state when action a is taken at state s. We
+update the state s to state s′ as follows. Recall that a state
+is mainly about the values of the points in the buffer, and in
+order to compute the state s′, we examine how the points in
+the buffer and their corresponding values would have changed
+after psj is dropped and a new point pi is inputted.
+First, we consider the consequence of dropping psj . After
+the point psj is dropped, only two neighboring points, namely
+psj−1 and psj+1, could have their anchor segment changed.
+Speciﬁcally, pointpsj−1’s (ifj−1≥ 2) anchor segment would
+be changed from psj−2psj to psj−2psj+1 and point psj+1’s (if
+j + 1 ≤ W− 1) anchor segment would be changed from
+psjpsj+2 topsj−1psj+2. Therefore, the values of the two points
+need to be updated, which we do as follows.
+v(psj−1 ) = max{ϵ(psj−2psj+1|psj−1 ),ϵ (psj−2psj+1|psj )}
+(5)
+v(psj+1 ) = max{ϵ(psj−1psj+2|psj+1 ),ϵ (psj−1psj+2|psj )}
+(6)
+Here, we include the two errors (i.e., ϵ(psj−2psj+1|psj ) and
+ϵ(psj−1psj+2|psj )) wrt the point psj for updates. The rationale
+is as follows. Recall that v(psj−1 ) is deﬁned to capture
+the consequence of dropping psj−1. Ideally, v(psj−1 ) should
+be deﬁned as the error of the segment psj−2psj+1, i.e.,
+maxpϵ(psj−2psj+1|p), where p is a point that takes segment
+psj−2psj+1 as the anchor segment. In the online mode, among
+those points that take segment psj−2psj+1 as the anchor
+segment, only psj−1 and psj are accessible when psj is being
+dropped. Therefore, we include ϵ(psj−2psj+1|psj ) for deﬁning
+v(psj−1 ). Similarly, we include ϵ(psj−1psj+2|psj ) for deﬁning
+v(psj+1 ).
+Second, we consider the consequence of inserting point pi.
+With point pi inserted to the buffer, there would be W +
+1 points, which we still denote by ps1,ps2,...,p sW +1. Note
+that psW +1 corresponds to pi. The value of psW , which is
+previously not deﬁned (since it is the last point in the buffer
+before pi is inserted), needs to be deﬁned as follows.
+v(psW ) = ϵ(psW−1psW +1|psW ) (7)
+
+The values of all other points are unchanged. Based on these
+values, we compute the states′ in the same way as we compute
+the state s (Section IV-A1).
+4) Rewards: Consider that we perform an actiona at a state
+s and then we arrive at a new state s′. We deﬁne the reward
+associated with this transition from state s to state s′, which
+we denote by r, as follows. At state s, we have W points
+in the buffer and a new point pi to be inserted. We consider
+those points in the buffer, which constitute a trajectory that
+corresponds to a simpliﬁed trajectory of the trajectory fed so
+far, i.e., T [1 : i− 1]. We denote this simpliﬁed trajectory by
+T′. Similarly, at state s′, we have a simpliﬁed trajectory of
+T [1 : i], which we denote by T′′. We then deﬁne the reward
+r as follows.
+r =ϵ(T′)−ϵ(T′′) (8)
+where ϵ(T′) is wrt T [1 : i− 1] and ϵ(T′′) is wrt T [1 : i].
+The intuition is that if the error of the simpliﬁed trajectory
+resulted from the action, i.e.,ϵ(T′′), is smaller, then the reward
+is larger. With this deﬁnition, it would favor those actions that
+lead to simpliﬁed trajectories with smaller errors. In fact, it
+could be veriﬁed that with this reward deﬁnition, the goal of
+the MDP problem is well aligned with that of the trajectory
+simpliﬁcation problem. To see this, suppose that we go through
+a sequence of states s1,s 2,...,s N and correspondingly, we
+receive a sequence of rewards r1,r 2,...,r N−1. In the case that
+the future rewards are not discounted, we have
+N−1∑
+t=1
+rt =
+N−1∑
+t=1
+(ϵ(T′
+t )−ϵ(T′′
+t )) = ϵ(T′
+1)−ϵ(T′′
+N−1) =−ϵ(T′′
+N−1)
+(9)
+where T′
+t (resp. T′′
+t ) is the simpliﬁed trajectory at the state
+st before (resp. after) the action at is performed. Note that
+ϵ(T′
+1) = 0 since at the start state, no points have been dropped
+and thus the error is equal to 0, and ϵ(T′′
+N−1) corresponds to
+the error of the simpliﬁed trajectory of T .
+Remarks. We note that for the computation of the reward
+r, which involves the computations of the errors of two sim-
+pliﬁed trajectories, is only required for the learning process.
+Therefore, we can use a repository of trajectories for the
+learning process, and once a policy has been learned, we use
+it for trajectory simpliﬁcation. In addition, we note that we
+can compute ϵ(T′
+t )’s and ϵ(T′′
+t )’s incrementally except for
+ϵ(T′
+1) since T′′
+t corresponds to T′
+t with one point dropped
+(1≤ t≤ N) and T′
+t+1 corresponds to T′′
+t with one point
+inserted (1≤t≤N− 1).
+B. Policy Learning on the MDP
+The core problem of an MDP is to ﬁnd an optimal policy for
+the agent, which corresponds to a function that speciﬁes the
+action that the agent should choose at a speciﬁc state so as
+to maximize the accumulative rewards. We learn the policy
+for the MDP via a policy gradient (PNet) method, which
+is widely used [6]–[8]. PNet models a stochastic policy as
+πθ(a|s), which means the probability of selecting an action a
+for a given state s. PNet parameterizes πθ(a|s) using a neural
+network as follows.
+πθ(a|s) = σ(Ws + b) (10)
+where σ denotes the softmax function and θ = {W, b}
+denotes the parameters of the neural network. Then, PNet
+computes the gradients of some performance measure wrt the
+parameters θ as follows.
+∇θJ(θ) =
+N∑
+t=1
+Rt−R
+σR
+∇θ lnπθ(at|st) (11)
+where s1,s 2,...,s N is a sequence of states, a1,a 2,...,a N−1
+is a sequence of actions by sampling πθ(a|st), Rt denotes
+the accumulative reward since action at is taken, R is the
+mean of Rt’s, and σR is the standard deviation of Rt’s.
+PNet repeatedly updates the parameters θ via gradient ascent
+based on the gradients computed in Equation (11) until some
+stopping criterion speciﬁed by users is satisﬁed. Note that PNet
+corresponds to a variant of the REINFORCE algorithm with
+baseline [6]–[8] and the normalization mechanism based on
+the mean and standard deviation helps reduce the variance of
+the computed gradients in Equation (11).
+C. The RLTS Algorithm
+Our RLTS algorithm is based on the learned policy for the
+MDP that models the Min-Error problem, which is presented
+in Algorithm 1. Speciﬁcally, it stores the ﬁrst W points in
+the buffer directly (Line 1 - 3). It initializes an index t for a
+sequence of states and actions to be traversed (Line 4); Then,
+for each of the following points, says,pi, it proceeds as follows
+(Line 5). It computes (incrementally if possible) the values of
+the points in the buffer except for the ﬁrst one, i.e., v(psj )
+(2 ≤ j ≤ W ), and maintains the values in a min-priority
+queue with the ascending permutation denoted by π (Line 6).
+It then constructs a state st containing the set of k lowest
+values of points (Line 7), and samples an action at based on
+the stochastic policy that has been learned (Line 8). Based
+on the sampled action at =j, it drops the point with the jth
+lowest value, i.e.,pπ(j) (Line 9). It then inserts the pointpi that
+is being processed (Line 10). Finally, it returns a simpliﬁed
+trajectory T′ which involves all the W points in the buffer
+(Line 13 - 14).
+Time complexity. The time complexity of the RLTS algorithm
+is O((n−W ) logW ), where n is the number of points in
+the input trajectory T and W denotes the storage budget of
+the buffer. To see this, the complexity is dominated by the
+part of processing the last (n− W ) points (Line 5 - 12
+in Algorithm 1), and the time cost of processing one point
+consists of (1) that of computing the state whose cost is O(1)
+incrementally (Line 6); (2) that of maintaining the min-priority
+queue is O(logW ) (Line 6); and (3) that of constructing a
+state, sampling an action, dropping a point, inserting a point
+and updating the index is O(1) assumingk is a constant (Line
+7 - 10). We note that this time complexity is the same as
+those of existing algorithms [3]–[5] and all algorithms can
+
+Algorithm 1 The RLTS algorithm
+Require: A trajectory T =< p1,p 2,...,p n > which is in-
+putted in an online fashion; A buffer with a storage budget
+W (W <n);
+Ensure: A simpliﬁed trajectory T′ of T with|T′|≤ W ;
+1: fori = 1, 2,...,W do
+2: Store point pi into the buffer;
+3: end for
+4: t← 1;
+5: fori =W + 1,W + 2,...,n do
+6: Compute (incrementally if possible) the values of the
+points in the buffer except for the ﬁrst one, i.e., v(psj )
+(2≤ j≤ W ) and maintain the values in a min-priority
+queue with the ascending permutation denoted by π;
+7: Construct a state st ←
+{v(pπ(1)),v (pπ(2)),...,v (pπ(k))};
+8: Sample an action at∼πθ(a|s);
+9: Drop the point pπ(j) from the buffer where at =j;
+10: Insert the point pi into the buffer;
+11: t←t + 1;
+12: end for
+13: TrajectoryT′← the sequence of points in the buffer;
+14: Return trajectory T′;
+meet practical requirements as shown in our experiments (e.g.,
+the time of processing one point is much less than 1ms on a
+moderate machine). Compared with existing algorithms, RLTS
+is based on a learned policy but not some human-crafted rules,
+and thus it could return simpliﬁed trajectories with smaller
+errors.
+To analyze the time cost of learning the policy, we ﬁrst
+consider the time cost of learning on one trajectory of length n
+for one epoch. The time cost should beO((n−W )(n+logW ))
+since compared with the RLTS algorithm, the training process
+involves two additional costs, namely that for computing the
+reward after an action is taken and that for performing the
+gradient decent over a neural network. The former has the
+cost of O(n) and the latter has a constant cost given that the
+neural network we use has a small size that is independent of
+the problem size. Let Nt be the number of trajectories and E
+be the number of epochs for training the policy. The time cost
+of training is O(E·Nt· (n−W )(n + logW )).
+D. The RLTS-Skip Algorithm
+In the RLTS algorithm, each point is inserted to the buffer
+for sure after it is scanned. It may then be dropped when some
+following points are being scanned. Consequently, when each
+point is being scanned, some efforts are spent on deciding
+which existing point in the buffer to be dropped by going
+through a neural network in RLTS. While this strategy gives
+each point a chance to be included in the buffer and thus
+exploring a large space of possible simpliﬁed trajectories, it
+may be too conservative. Consider a scenario where the points
+that are scanned most recently constitute a trajectory that
+indicates a movement along a straight line with a constant
+speed. In this scenario, we have much conﬁdence to drop a
+certain number of points in a row without including them one
+by one to the buffer and then dropping some of them at later
+stages. This would help save the efforts for deciding and taking
+actions when scanning these points and at the same time, the
+effectiveness should not be affected much.
+Motivated by this, we propose to augment the MDP that is
+deﬁned in Section IV-A by introducing J additional actions
+when scanning a point pi, namely (1) dropping pi and con-
+tinuing to scan pi+1, (2) dropping pi andpi+1 and continuing
+to scan pi+2, ..., and ( J) dropping pi, pi+1, ..., and pi+J−1
+and continuing to scan pi+J. Here, J is a hyper-parameter,
+which could be tuned. These actions essentially mean (1)
+skipping 1 point, (2) skipping 2 points, ..., and ( J) skipping J
+points during the process of scanning the points of a trajectory
+sequentially. As a result, the augmented MDP involves (k +J)
+actions, namely the k actions of the original MDP as deﬁned
+in Section IV-A2 and the J actions as newly introduced in
+this section. Note that these (k +J) actions are exclusive and
+at each state, only one of them could be taken. For an action
+of dropping a point, the reward is deﬁned the same as in the
+online mode. For an action of skipping j points, the reward is
+still deﬁned by Equation (8), but with T′′ changed to be the
+points stored in the buffer plus pi+j, which corresponds to a
+simpliﬁed trajectory ofT [1 : i+j].All other components of the
+original MDP remain unchanged. We call the reinforcement
+learning algorithm based on this augmented MDP as RLTS-
+Skip. We note that when J is set to 0, RLTS-Skip reduces to
+RLTS.
+The RLTS-Skip algorithm is illustrated in Figure 2 with the
+inputted data trajectory shown at the left side and W = 4. It
+ﬁrst stores 4 points p1, p2, p3 and p4 in the buffer. It then
+scans point p5, observes the ﬁrst state s1 and takes the action
+of dropping the point p3. It then scans point p6, updates the
+values of two neighboring points of p3, namely p2 and p4,
+and computes the value of the newly inserted point p5. It then
+observes the second state s2 and takes the action of skipping
+the next 2 points, i.e., p6 andp7. It then scans p8 and updates
+the value of p5. It observes the third state s3, takes an action
+of dropping p2, and then terminates. At the end, it returns a
+simpliﬁed trajectory T′ =< p1,p 4,p 5,p 8 >, which has the
+PED error 0.693.
+As could be veriﬁed, RLTS-Skip has the same time com-
+plexity as RLTS. But in practice, RLTS-Skip should have
+better efﬁciency than RLTS for two reasons: (1) At each state,
+RLTS-Skip can take either a “dropping” action (among the k
+actions) or a “skipping” action (among the J actions), RLTS
+can only take a “dropping” action, and the cost incurred by a
+“skipping” action is smaller than that by a “dropping” action
+(since for a “dropping” action, the values of three points
+need to be updated (Equation (5), (6), and (7)) while for a
+“skipping” action, only the value of one point need to be
+updated (Equation (7)); and (2) For RLTS-Skip, for those
+points that are skipped, the efforts for deciding and taking
+an action are saved.
+
+Initial Store<p 1,p 2,p 3,p 4 > into the buffer with the initial reward 0.0
+Point State Action Buffer Reward Accum Reward
+p5 s1 ={v(p2) = 0.243,v (p3) = 0.354,v (p4) = 1.0} Dropp3 <p 1,p 2,p 4,p 5 > -0.354 -0.354
+p6 s2 ={v(p2) = 0.693,v (p5) = 0.728,v (p4) = 1.265} Skipp6 andp7<p 1,p 2,p 4,p 5 > -0.278 -0.632
+p7 - - - - -
+p8 s3 ={v(p2) = 0.693,v (p5) = 1.0,v (p4) = 1.265} Dropp2 <p 1,p 4,p 5,p 8 > -0.061 -0.693
+Output ReturnT′ =<p 1,p 4,p 5,p 8 > withϵ(T′) = 0.693
+Fig. 2. Illustration of the RLTS-Skip algorithm with PED.
+V. A LGORITHMS FOR BATCH MODE
+In the batch mode, we have more data access than in the
+online mode. Speciﬁcally, we have access to all points of a
+trajectory during the course of trajectory simpliﬁcation in the
+batch mode, while in the online mode, we can only access
+those points that are stored in the buffer. With the increased
+data access, we have more options of deﬁning the states of the
+MDP. In the following, we investigate three state deﬁnitions,
+which capture different portions of the points of a trajectory,
+and correspondingly develop three different sets of algorithms,
+namely (1) RLTS and RLTS-Skip, (2) RLTS+ and RLTS-
+Skip+, and (3) RLTS++ and RLTS-Skip++.
+(1) RLTS and RLTS-Skip. The RLTS and RLTS-Skip algo-
+rithms that are designed for the online mode can immediately
+carry over for the batch mode. Same as the case of online
+mode, the states of the MDP underlying RLTS and RLTS-
+Skip are deﬁned based on those points that are stored in the
+buffer only. The time complexity of RLTS and RLTS-Skip is
+O((n−W ) logW ).
+(2) RLTS+ and RLTS-Skip+. In RLTS, a state is deﬁned
+based on the values of the points in the buffer and the value
+of a point is deﬁned as the error of its anchor segment wrt the
+point only. That is, the errors of the point’s anchor segment
+wrt other points that take the segment as an anchor segment
+are ignored since those points have been dropped already and
+are no longer accessible in the online mode. In the batch
+mode, this is not the case. In fact, we can make use of these
+errors for deﬁning the value of a point so as to capture richer
+information. Speciﬁcally, we deﬁne the value of a point psj
+(2≤ j ≤ W ) in the buffer as the maximum error of the
+psj ’s anchor segment wrt a point that takes the segment as its
+anchor segment as follows.
+v(psj ) := max
+sj−1≤i<sj+1
+ϵ(psj−1psj+1|pi) (12)
+With this new deﬁnition of the value of a point, we would have
+correspondingly a new MDP, a new learned policy and a new
+algorithm for trajectory simpliﬁcation. We call this algorithm
+RLTS+. Essentially, RLTS+ is an adapted version of RLTS
+with the states enhanced with additional information of those
+points that have been dropped before. The time complexity
+of RLTS+ is O((n−W )(n′ + logW )), where n′ is the cost
+of computing the value of a point and is bounded by n (in
+practice, n′≤n).
+Similarly, we reﬁne the state deﬁnition of the MDP for
+RLTS-Skip by (1) using the new deﬁnition of the value of
+a point (Equation (12)); and (2) appending J values to the
+originalk values, each corresponding to the error incurred by
+droppingj pointspi,...,p i+j−1 for 1≤j≤J, when scanning
+pointpi. We then develop an algorithm based on the MDP with
+the reﬁned state. We call the resulting algorithm RLTS-Skip+.
+The time complexity of RLTS-Skip+ is the same as RLTS+.
+(3) RLTS++ and RLTS-Skip++. In both RLTS and RLTS+,
+a buffer of a ﬁxed size (i.e., W ) is maintained and only those
+points stored in the buffer are considered as candidates to drop.
+This is necessary in the online mode due to the restricted
+data access. In the batch mode, all points can be accessed
+throughout the course of trajectory simpliﬁcation. Therefore,
+an alternative design is to use a buffer of a variable size.
+Speciﬁcally, we put all the points in the buffer at the beginning
+and each time we drop one point from the buffer until only
+W points remain in the buffer. Based on this design, we can
+deﬁne the states in the same way as we do for RLTS+ except
+that the buffer is of a variable size. Correspondingly, we can
+obtain a MDP, a learned policy and a trajectory simpliﬁcation
+algorithm. We call the resulting algorithm RLTS++. Similarly,
+we can replace the buffer of RLTS-Skip+ with one of a
+variable size and to obtain a new algorithm, which we call
+RLTS-Skip++. For RLTS-Skip++, all points are stored in the
+buffer at the beginning, an action of skipping j points means
+dropping j points.
+RLTS++ and RLTS-Skip++ come with an increased cost
+of computing a state since it needs to maintain the k lowest
+values among O(n) values instead of W values as RLTS or
+RLTS+ does. As a result, the time complexity of RLTS++ and
+RLTS-Skip++ becomes O((n−W )(n′ + logn)), where n′ is
+the cost of computing the value of a point and is bounded by
+n (in practice, n′≤n).
+Comparisons and Analysis. From RLTS, to RLTS+, to
+RLTS++, more information is captured for deﬁning the states,
+and correspondingly, the resulting algorithms for trajectory
+simpliﬁcation have more time costs, i.e., from O((n−
+W ) logW ), to O((n−W )(n′ + logW )), to O((n−W )(n′ +
+logn)). This holds for RLTS-Skip, RLTS-Skip+, and RLTS-
+Skip++ as well. As will be investigated in Section VI-A,
+these algorithms provide different trade-offs of effectiveness
+and efﬁciency. Among RLTS, RLTS+ and RLTS++, RLTS++
+has the best effectiveness and RLTS has the best efﬁciency.
+Among RLTS-Skip, RLTS-Skip+ and RLTS-Skip++, RLTS-
+Skip++ has the best effectiveness and RLTS-Skip has the
+best efﬁciency. As can be veriﬁed, the time complexity of
+training for RLTS, RLTS+, RLTS-Skip, and RLTS-Skip+ is
+O(E·Nt· (n−W )(n + logW )) and that for RLTS++ and
+RLTS-Skip++ is O(E·Nt· (n−W )(n + logn)), where E
+is the number of epochs and Nt is the number of trajectories
+used for training.
+
+TABLE I
+DATASET STATISTICS .
+Statistics Geolife T-Drive Truck
+# of trajectories 17,621 10,359 10,110
+Total # of points 24,876,978 17,740,902 10,059,685
+Ave. # of points per trajectory 1,412 1,713 995
+Sampling rate 1s ∼ 5s 177s 3s ∼ 60s
+Average distance 9.96m 623m 82.74m
+VI. EXPERIMENTS
+A. Experimental Setup
+Dataset. Our experiments are conducted on three real-world
+trajectory datasets, namely Geolife, T-Drive and Trucks. Geo-
+life1 records the outdoor trajectories of 182 users for a period
+of ﬁve years. T-Drive 2 tracks the trajectories of 10,357 taxis
+in Beijing, and Truck 3 records the GPS trajectories of 10,368
+trucks in China during a period from March to October, 2015.
+The three datasets are widely used in evaluating trajectory
+simpliﬁcation [16], [22], [25] including the recent dedicated
+evaluation work [2] and the detailed statistics are summarized
+in Table I.
+Algorithms for Comparison. We review the trajectory sim-
+pliﬁcation literature thoroughly and identify seven methods
+for comparison, including (1) STTrace [3], (2) SQUISH [4]
+and (3) SQUISH-E [5] for the online mode and (4) Bell-
+man [20], (5) Top-Down [39], (6) Bottom-Up [21], [25], and
+(7) Span-Search [22] for the batch mode. We cross check
+these algorithms against those covered in a recent survey [2]
+on trajectory simpliﬁcation so that all existing methods that
+are proposed for the Min-Error problem are included for
+comparison. Note that we do not compare with the adaptions
+of the algorithms that are designed for the dual problem of
+Min-Error (via binary search) since these adapted algorithms
+would have the time complexity at least O(n2 logn), e.g., for
+DAD, the time complexity is O(n2C logn), where C < n,
+which are clearly higher than those of RLTS and RLTS-Skip
+and not scalable on large datasets.
+Parameter Setting and Policy Learning. The neural network
+used in the RLTS and RLTS-Skip (RLTS+ and RLTS-Skip+)
+methods involves one input layer, one hidden layer and one
+output layer, where the hidden layer involves 20 neurons and
+uses the tanh function as the activation function. In order
+to avoid the data scale issues, batch normalization provided
+by tensorﬂow is employed before the activation. For RLTS
+(RLTS+), the output layer involves k neurons and k is set
+as 3 by default. For RLTS-Skip (RLTS-Skip+), the output
+layer involves (k + J) neurons and k and J are set as
+3 and 2, respectively. We study the effects of these two
+hyper-parameters in Section VI-B. We randomly sample 1,000
+trajectories from a training dataset, and for each trajectory, we
+generate 10 episodes for policy learning. Since each trajectory
+involves around 1,000 points, there would be about 10 million
+1http://research.microsoft.com/en-us/downloads/
+b16d359d-d164-469e-9fd4-daa38f2b2e13/
+2http://research.microsoft.com/apps/pubs/?id=152883
+3http://mashuai.buaa.edu.cn/traj.html
+(a) Effectiveness (b) Efﬁciency
+Fig. 3. Variants of RLTS (Batch mode)
+transition steps in the learning process. In addition, we use
+the Adam stochastic gradient descent with the learning rate of
+0.001 based on empirical ﬁndings. For the reward discount
+factor, we tried several settings, and since the results are
+similar, we set it as 0.99. We take the policy, which gives
+the maximum reward per episode and use it for trajectory
+simpliﬁcation. For the online mode, we sample an action with
+the probability outputted by the softmax function at each state,
+and for the batch mode, we take the action with the maximum
+probability based on empirical ﬁndings. The units of SED,
+PED, DAD, and SAD are 10m, 10m, 1 radian and 10m/s,
+respectively.
+Evaluation Platform. All the methods are implemented in
+Python 3.6. The implementation of RLTS and RLTS-Skip
+(RLTS+ and RLTS-Skip+) is based on tensorﬂow 1.8.0.
+The experiments are conducted on a machine with Intel(R)
+Xeon(R) CPU E5-1620 v2 @3.70GHz 16.0GB RAM and one
+Nvidia GeForce GTX 1070 GPU. The codes can be down-
+loaded via the link https://github.com/zhengwang125/RLTS.
+B. Experimental Results
+(1) Comparison with the exact algorithm Bellman (Batch
+mode). Since Bellman has a cubic time complexity and is
+slow, we compare it with RLTS+ and RLTS-Skip+ on some
+small datasets only, for which we randomly select a set of
+100 trajectories, each with around 300 points from Geolife.
+The results are put in the technical report [40] due to the page
+limit.We observe that the simpliﬁcation error of RLTS+ and
+RLTS-Skip+ is very close to the exact algorithm Bellman for
+the four measurements; however, RLTS+ and RLTS-Skip+ run
+faster than Bellman by around three orders of magnitude. The
+results on the other datasets are qualitatively similar and thus
+omitted.
+(2) Comparison among variants (batch mode). We ran-
+domly sample 1,000 trajectories from Geolife each with 5,000
+points, run the algorithms, and report the average SED error
+and running time. The results are shown in Figure 3. We
+observe that the effectiveness increases and the efﬁciency
+drops from RLTS, to RLTS+, to RLTS++. This is because from
+RLTS, to RLTS+, to RLTS++, more information is captured
+for deﬁning the states, and correspondingly the MDP is more
+powerful yet takes more time to run. Besides, only RLTS+
+dominates the best existing algorithm, i.e., Bottom-UP, in
+terms of both effectiveness and efﬁciency. The results for
+
+(a) SED Error (b) PED Error (c) DAD Error (d) SAD Error
+(e) SED Error (f) PED Error (g) DAD Error (h) SAD Error
+Fig. 4. Effectiveness evaluation with varying W ((a)-(d): Online mode, (e)-(h): Batch mode, Geolife).
+RLTS-Skip, RLTS-Skip+, and RLTS-Skip++ show a similar
+trend and are put in the technical report [40] due to the page
+limit. Therefore, in the following experiments, we focus on
+RLTS+ and RLTS-Skip+ for the batch mode.
+(3) Effectiveness evaluation (comparison with existing
+approximate algorithms). We randomly sample 1,000 tra-
+jectories T from a dataset and vary the storage budget W
+from 0.1×| T| to 0.5×| T| by following [22]. Figure 4
+show the results for both online and batch modes on the
+Geolife dataset. The results on the other two datasets T-
+Drive and Truck demonstrate similar trends and are put in
+a technical report [40]. Overall, the results clearly show that
+RLTS (RLTS+) consistently outperforms existing algorithms
+under all error measurements for both online and batch modes
+and on all datasets. For RLTS-Skip (RLTS-Skip+), it beats
+all baselines for the online mode, and provides comparable
+performance in the batch mode. In addition, the effectiveness
+of RLTS-Skip (RLTS-Skip+) is slightly worse than RLTS
+(RLTS+), but still better than that of the baselines due to its
+data-driven nature.
+(4-6) Effectiveness evaluation (the learned policy, param-
+eter k and J). We conduct experiments to study the effect
+of the learned policy, parameter k, and parameter J on 1,000
+randomly sampled trajectories from Geolife. The results and
+detailed description are included in the technical report [40]
+due to the page limit. We conclude from the results that: (1)
+the learned policy contributes signiﬁcantly to the effectiveness
+especially in the online mode; (2) as k grows, the running time
+becomes larger and the accuracy becomes better as expected;
+(3) as J grows, RLTS-Skip has its effectiveness degrades and
+efﬁciency improves.
+(7) Efﬁciency evaluation (varying the trajectory length|T|).
+We follow [2], [22] by varying |T| from 10,000 to 50,000.
+For each setting, we randomly select 100 trajectories with
+the size around the setting from Truck. We ﬁx W at 0.1|T|.
+(a) Online (b) Batch
+Fig. 5. Efﬁciency evaluation (varying |T|) on Truck.
+(a) Online (b) Batch
+Fig. 6. Efﬁciency evaluation (varying W ) on Truck.
+Figure 5 shows the results for both online and batch modes
+under SED. In the online mode, we show the average running
+time per point because the processing time of a single point is
+important for an online scenario. In addition, the sampling rate
+(3s) of the Truck dataset is shown with a dotted line in the
+ﬁgure for reference. We observe that RLTS and RLTS-Skip
+are slightly slower than the three baseline algorithms though
+all of them have the same time complexity. This is because
+learning-based algorithms employ the learning models to make
+the decision (i.e., dropping or skipping) while the other three
+algorithms use a simple comparison operation for the same
+task. In addition, RLTS-Skip runs faster than RLTS since the
+time cost of constructing states and choosing actions are saved
+
+(a) RLTS (ϵ = 2.851) (b) RLTS-Skip ( ϵ = 3.987) (c) SQUISH, SQUISH-E ( ϵ = 5.987) (d) STTrace ( ϵ = 5.866)
+Fig. 7. Case study (Online mode, Geolife).
+TABLE II
+TRAINING TIME ON GEOLIFE (HOURS ).
+Measurement SED PED DAD SAD
+Mode Online Batch Online Batch Online Batch Online Batch
+RLTS(+) 10.3 11.1 9.7 11.5 9.3 10.1 14.1 15.2
+RLTS-Skip(+) 9.7 10.7 7.3 7.6 6.5 6.8 12.3 13.9
+for those points that have been skipped. Overall, RLTS and
+RLTS-Skip are fast enough (very close to other algorithms)
+and far meets the practical needs, e.g., for a trajectory with
+about 10,000 points, they take less than 0.15ms per point,
+which is 20,000 times faster than the sampling rate (3s). In
+the batch mode, both RLTS+ and RLTS-Skip+ are faster than
+Top-Down and Bottom-Up, and the gaps of efﬁciency are
+aligned with the time complexities. We omit the running time
+of Span-Search because it has been shown to be slower than
+Top-Down in the existing studies [2], [22]. The results on the
+other datasets under other error measurements are qualitatively
+similar as those reported in Figure 5 and are omitted.
+(8) Scalability test. We conduct the scalability test on long
+trajectories in the datasets. The results are included in the
+technical report [40] due to the page limit. Here, we present the
+running time results on the longest trajectory, which involves
+around 383,000 points, that RLTS-Skip+, RLTS+, Bottom-
+Up, and Top-Down run in 2,843s, 3,412s, 4,952s, 98,427s,
+respectively.
+(9) Efﬁciency evaluation (varying the budget size W ).
+We vary W from 0.1|T| to 0.5|T| on Truck and ﬁx |T| at
+40,000 using SED as the error measurement. Figure 6 shows
+the result for both the online and batch modes. Similarly, in
+the online mode, RLTS and RLTS-Skip are a bit slower than
+SQUISH, SQUISH-E and STTrace, but run reasonably fast.
+For example, they take less than 1ms per point point for a
+trajectory with 40,000 points. The running times of all the
+methods slightly increase with W . In the batch mode, both
+RLTS+ and RLTS-Skip+ run faster than Top-Down by around
+two orders of magnitude. They also run faster than Bottom-Up,
+and the gap reduces as W increases since they take O(logW )
+time to construct states while Bottom-Up takes O(logn) time
+to decide which segments to merge.
+(10) Case study. In Figure 7, blue solid lines indicate a
+raw trajectory and red dashed lines indicate its simpliﬁed
+trajectories by different algorithms in the online mode. We
+label the SED errors with black dashed lines. The results
+clearly show that our RL-based methods return better results
+than baselines. For example, the SED of RLTS ( ϵ = 2.851) is
+around half of those of SQUISH and SQUISH-E ( ϵ = 5.987),
+(a) SED Error (b) Time cost
+Fig. 8. Training cost on Geolife (Online mode).
+and STTrace (ϵ = 5.866). The results for the batch mode show
+similar clues and can be found in the technical report [40].
+(11) Training time. The training times of RLTS and RLTS-
+Skip (RLTS+ and RLTS-Skip+) under different error mea-
+surements on Geolife are shown in Table II. It normally
+takes several hours to train a satisfactory RL model. The
+reported training times of RLTS-Skip are smaller than those
+of RLTS. This is because we use the same training samples
+and epochs for training both algorithms and RLTS-Skip runs
+faster.Further, we study how the number of training samples
+affects the model performance. We randomly sample 5 training
+sets from Geolife, which include 500, 1,000, 1,500, 2,000,
+2,500 trajectories, respectively. For each training set, we report
+its training cost and the corresponding effectiveness with
+the default setup in Section VI-A. The results are shown in
+Figure 8. We observe that the effectiveness slightly improves
+with the number of training samples and the corresponding
+training cost increases almost linearly. We use the learned
+policy based on the 1,000 trajectories for other experiments
+because it gives a reasonable trade-off between effectiveness
+and training cost.
+VII. CONCLUSION
+In this paper, we study the trajectory simpliﬁcation prob-
+lem in both online and batch modes. We propose a rein-
+forcement learning (RL)-based method called RLTS for both
+modes. Compared with existing algorithms, which are mainly
+heuristic-based, our RLTS method is data-driven and can adapt
+to different dynamics of the underlying points. We conduct
+extensive experiments, which show that RLTS computes sim-
+pliﬁed trajectories with consistently lower errors and runs
+comparably fast in the online mode and faster in the batch
+mode, compared with existing algorithms. One interesting
+direction for future research is to explore how to choose
+the error measurement (e.g., SED, PED, etc.) adaptively for
+different application scenarios.
+
+Acknowledgments. This research is supported by the
+Nanyang Technological University Start-UP Grant from the
+College of Engineering under Grant M4082302 and by the
+Ministry of Education, Singapore, under its Academic Re-
+search Fund Tier 1 (RG20/19 (S)). Gao Cong was supported
+in part by a MOE Tier-2 grant MOE2019-T2-2-181, a MOE
+Tier-1 grant RG114/19, and an NTU ACE grant.
+REFERENCES
+[1] Z. Wang, C. Long, G. Cong, and C. Ju, “Effective and efﬁcient sports
+play retrieval with deep representation learning,” in Proceedings of the
+25th ACM SIGKDD International Conference on Knowledge Discovery
+& Data Mining , 2019, pp. 499–509.
+[2] D. Zhang, M. Ding, D. Yang, Y . Liu, J. Fan, and H. T. Shen, “Trajectory
+simpliﬁcation: an experimental study and quality analysis,” Proceedings
+of the VLDB Endowment , vol. 11, no. 9, pp. 934–946, 2018.
+[3] M. Potamias, K. Patroumpas, and T. Sellis, “Sampling trajectory streams
+with spatiotemporal criteria,” in 18th International Conference on Scien-
+tiﬁc and Statistical Database Management (SSDBM’06) . IEEE, 2006,
+pp. 275–284.
+[4] J. Muckell, J.-H. Hwang, V . Patil, C. T. Lawson, F. Ping, and S. Ravi,
+“Squish: an online approach for gps trajectory compression,” inProceed-
+ings of the 2nd International Conference on Computing for Geospatial
+Research & Applications . ACM, 2011, p. 13.
+[5] J. Muckell, P. W. Olsen, J.-H. Hwang, C. T. Lawson, and S. Ravi,
+“Compression of trajectory data: a comprehensive evaluation and new
+approach,” GeoInformatica, vol. 18, no. 3, pp. 435–460, 2014.
+[6] R. J. Williams, “Simple statistical gradient-following algorithms for
+connectionist reinforcement learning,” Machine learning, vol. 8, no. 3-4,
+pp. 229–256, 1992.
+[7] A. Ilyas, L. Engstrom, S. Santurkar, D. Tsipras, F. Janoos, L. Rudolph,
+and A. Madry, “A closer look at deep policy gradients,” International
+Conference on Learning Representations , 2020.
+[8] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Prox-
+imal policy optimization algorithms,” arXiv preprint arXiv:1707.06347,
+2017.
+[9] H. Li, L. Kulik, and K. Ramamohanarao, “Spatio-temporal trajectory
+simpliﬁcation for inferring travel paths,” in Proceedings of the 22nd
+ACM SIGSPATIAL International Conference on Advances in Geographic
+Information Systems, 2014, pp. 63–72.
+[10] N. Meratnia and A. Rolf, “Spatiotemporal compression techniques
+for moving point objects,” in International Conference on Extending
+Database Technology. Springer, 2004, pp. 765–782.
+[11] J. Liu, K. Zhao, P. Sommer, S. Shang, B. Kusy, and R. Jurdak, “Bounded
+quadrant system: Error-bounded trajectory compression on the go,” in
+2015 IEEE 31st International Conference on Data Engineering . IEEE,
+2015, pp. 987–998.
+[12] J. Liu, K. Zhao, P. Sommer, S. Shang, B. Kusy, J.-G. Lee, and R. Jurdak,
+“A novel framework for online amnesic trajectory compression in
+resource-constrained environments,” IEEE Transactions on Knowledge
+and Data Engineering , vol. 28, no. 11, pp. 2827–2841, 2016.
+[13] B. Ke, J. Shao, Y . Zhang, D. Zhang, and Y . Yang, “An online approach
+for direction-based trajectory compression with error bound guarantee,”
+in Asia-Paciﬁc Web Conference. Springer, 2016, pp. 79–91.
+[14] B. Ke, J. Shao, and D. Zhang, “An efﬁcient online approach for
+direction-preserving trajectory simpliﬁcation with interval bounds,” in
+2017 18th IEEE International Conference on Mobile Data Management
+(MDM). IEEE, 2017, pp. 50–55.
+[15] W. Cao and Y . Li, “Dots: An online and near-optimal trajectory
+simpliﬁcation algorithm,” Journal of Systems and Software , vol. 126,
+pp. 34–44, 2017.
+[16] X. Lin, S. Ma, H. Zhang, T. Wo, and J. Huai, “One-pass error bounded
+trajectory simpliﬁcation,” Proceedings of the VLDB Endowment, vol. 10,
+no. 7, pp. 841–852, 2017.
+[17] X. Lin, J. Jiang, S. Ma, Y . Zuo, and C. Hu, “One-pass trajectory
+simpliﬁcation using the synchronous euclidean distance,” The VLDB
+Journal, vol. 28, no. 6, pp. 897–921, 2019.
+[18] G. Trajcevski, H. Cao, P. Scheuermanny, O. Wolfsonz, and D. Vaccaro,
+“On-line data reduction and the quality of history in moving objects
+databases,” in Proceedings of the 5th ACM international workshop on
+Data engineering for wireless and mobile access . ACM, 2006, pp.
+19–26.
+[19] P. Katsikouli, R. Sarkar, and J. Gao, “Persistence based online signal and
+trajectory simpliﬁcation for mobile devices,” in Proceedings of the 22nd
+ACM SIGSPATIAL International Conference on Advances in Geographic
+Information Systems, 2014, pp. 371–380.
+[20] R. Bellman, “On the approximation of curves by line segments using
+dynamic programming,” Communications of the ACM , vol. 4, no. 6, p.
+284, 1961.
+[21] E. Keogh, S. Chu, D. Hart, and M. Pazzani, “An online algorithm
+for segmenting time series,” in Proceedings 2001 IEEE international
+conference on data mining . IEEE, 2001, pp. 289–296.
+[22] C. Long, R. C.-W. Wong, and H. Jagadish, “Trajectory simpliﬁcation:
+on minimizing the direction-based error,” Proceedings of the VLDB
+Endowment, vol. 8, no. 1, pp. 49–60, 2014.
+[23] D. H. Douglas and T. K. Peucker, “Algorithms for the reduction of the
+number of points required to represent a digitized line or its caricature,”
+Cartographica: the international journal for geographic information and
+geovisualization, vol. 10, no. 2, pp. 112–122, 1973.
+[24] M. Chen, M. Xu, and P. Franti, “A fast o(n) multiresolution polyg-
+onal approximation algorithm for gps trajectory simpliﬁcation,” IEEE
+Transactions on Image Processing, vol. 21, no. 5, pp. 2770–2785, 2012.
+[25] C. Long, R. C.-W. Wong, and H. Jagadish, “Direction-preserving tra-
+jectory simpliﬁcation,” Proceedings of the VLDB Endowment , vol. 6,
+no. 10, pp. 949–960, 2013.
+[26] Y . Chen, K. Jiang, Y . Zheng, C. Li, and N. Yu, “Trajectory simpliﬁcation
+method for location-based social networking services,” in Proceedings
+of the 2009 International Workshop on Location Based Social Networks,
+2009, pp. 33–40.
+[27] Y . Zhao, S. Shang, Y . Wang, B. Zheng, Q. V . H. Nguyen, and K. Zheng,
+“Rest: A reference-based framework for spatio-temporal trajectory com-
+pression,” in Proceedings of the 24th ACM SIGKDD International
+Conference on Knowledge Discovery & Data Mining . ACM, 2018,
+pp. 2797–2806.
+[28] T. Li, R. Huang, L. Chen, C. S. Jensen, and T. B. Pedersen, “Com-
+pression of uncertain trajectories in road networks,” Proceedings of the
+VLDB Endowment, vol. 13, no. 7, pp. 1050–1063, 2020.
+[29] C. Chen, Y . Ding, X. Xie, S. Zhang, Z. Wang, and L. Feng, “Tra-
+jcompressor: An online map-matching-based trajectory compression
+framework leveraging vehicle heading direction and change,” IEEE
+Transactions on Intelligent Transportation Systems , vol. 21, no. 5, pp.
+2012–2028, 2019.
+[30] Y . Han, W. Sun, and B. Zheng, “Compress: A comprehensive framework
+of trajectory compression in road networks,” ACM Transactions on
+Database Systems (TODS) , vol. 42, no. 2, pp. 1–49, 2017.
+[31] X. Yang, B. Wang, K. Yang, C. Liu, and B. Zheng, “A novel repre-
+sentation and compression for queries on trajectories in road networks,”
+IEEE Transactions on Knowledge and Data Engineering , vol. 30, no. 4,
+pp. 613–629, 2017.
+[32] R. Song, W. Sun, B. Zheng, and Y . Zheng, “Press: A novel framework
+of trajectory compression in road networks,” Proceedings of the VLDB
+Endowment, vol. 7, no. 9, p. 661–672, 2014.
+[33] S. Koide, Y . Tadokoro, C. Xiao, and Y . Ishikawa, “Cinct: Compression
+and retrieval for massive vehicular trajectories via relative movement
+labeling,” in 2018 IEEE 34th International Conference on Data Engi-
+neering (ICDE). IEEE, 2018, pp. 1097–1108.
+[34] R. S. Sutton and A. G. Barto, Reinforcement learning: An introduction .
+MIT press, 2018.
+[35] M. L. Puterman, Markov Decision Processes.: Discrete Stochastic Dy-
+namic Programming. John Wiley & Sons, 2014.
+[36] W. Kong, C. Liaw, A. Mehta, and D. Sivakumar, “A new dog learns old
+tricks: Rl ﬁnds classic optimization algorithms,” 2018.
+[37] Z. Wang, C. Long, G. Cong, and Y . Liu, “Efﬁcient and effective similar
+subtrajectory search with deep reinforcement learning,” Proceedings of
+the VLDB Endowment , vol. 13, no. 12, pp. 2312–2325, 2020.
+[38] R. Marcus and O. Papaemmanouil, “Deep reinforcement learning for
+join order enumeration,” in Proceedings of the First International
+Workshop on Exploiting Artiﬁcial Intelligence Techniques for Data
+Management. ACM, 2018, p. 3.
+[39] J. E. Hershberger and J. Snoeyink, Speeding up the Douglas-Peucker
+line-simpliﬁcation algorithm. University of British Columbia, Depart-
+ment of Computer Science, 1992.
+[40] Z. Wang, C. Long, and G. Cong, “Trajectory simpliﬁcation with rein-
+forcement learning (technical report),” https://personal.ntu.edu.sg/wang
+zheng/paper/RLTS-TR.pdf.
