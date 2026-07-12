@@ -7,11 +7,13 @@ data_small/
 RLTS/batch-rlts/save/
 RLTS/TrajData/
 MARL4TS/TrajData/
+MARL4TS_full_data/
 batch/DPTS_prepared/
 batch/DPTS_prepared_newdatasets/
 batch/DPTS_prepared_smoke/
 batch/DPTS_prepared_test/
 lossless/trajic/result/
+lossless/trajstore/tmp*/
 online/VOLTCom/data_set/
 online/VOLTCom/results/
 RL4QDTS/TrajData/Geolife_out/

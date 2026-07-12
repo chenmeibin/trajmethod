@@ -1,0 +1,14 @@
+step1: load->preprocess->store
+1.1. Config the file resources/others/experiments/preprocess_store.json. Here the json file is an example of T-Drive.
+1.2. Submit spark job in the clusters. For example:
+spark-submit --class com.urbancomputing.geomesa.apply.experiment.PreprocessStoreApp  --master yarn --deploy-mode cluster --num-executors 20 --executor-memory 8G  geomesa-apply_2.11-2.3.0-jar-with-dependencies.jar hdfs://hostname/ hdfs://hostname/file/path/preprocess_store.json
+
+step2: query
+2.1. Get the "objectId" and "trajId" according to experiment/utils/*.java
+2.2. Execute trajectories using the file experiment/query/*.java
+
+Explanation of the arguments in config file：
+1."fileMode": there are two possible values: "multi_file" and "single_file". Here, "multi_file" means the trajectories of an object are stored in a single file (like t_trive); "single_file" means that the trajectories of all objects are stored in a single file.
+2."partNum": is the partition number, which differs according to the datasets and clusters.
+1."storePoint": "true" means we adopt v-store to store the trajectories; "false" means we adopt h-store schema when storing trajectories. Default value is true.
+2."storeList": antonym of "storePoint", "true" is h-store, "false" means v-store.

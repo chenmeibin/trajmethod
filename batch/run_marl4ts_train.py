@@ -24,6 +24,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--train-op", type=int, default=10)
     parser.add_argument("--tag", default="run1")
+    parser.add_argument("--start-episode", type=int, default=0)
+    parser.add_argument("--resume-ow", default="")
+    parser.add_argument("--resume-cw", default="")
+    parser.add_argument("--resume-best-valid", type=float, default=None)
     return parser.parse_args()
 
 
@@ -53,12 +57,27 @@ def main() -> None:
     log_csv = output_dir / "training_log.csv"
     run_info = output_dir / "run_info.txt"
     progress_txt = output_dir / "progress.txt"
-    best_valid_ratio = float("inf")
+    best_valid_ratio = float("inf") if args.resume_best_valid is None else args.resume_best_valid
     records: list[tuple[int, float, float]] = []
 
-    with log_csv.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["episode", "train_ratio", "valid_ratio"])
+    if args.resume_ow:
+        rl_ow.load(str((workspace_root / args.resume_ow).resolve()))
+        rl_ow.update_target_model()
+    if args.resume_cw:
+        rl_cw.load(str((workspace_root / args.resume_cw).resolve()))
+        rl_cw.update_target_model()
+
+    if args.start_episode > 0 and log_csv.exists():
+        with log_csv.open("r", newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            next(reader, None)
+            for row in reader:
+                if len(row) >= 3:
+                    records.append((int(row[0]), float(row[1]), float(row[2])))
+    else:
+        with log_csv.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["episode", "train_ratio", "valid_ratio"])
 
     def run_validation() -> float:
         eva = []
@@ -77,7 +96,7 @@ def main() -> None:
         return sum(eva) / len(eva) if eva else float("inf")
 
     wall_start = time.time()
-    for episode in range(args.train_amount):
+    for episode in range(args.start_episode, args.train_amount):
         env.reset(episode)
         obs_ow, act_ow, transition_ow = [], [], []
         obs_cw, act_cw, transition_cw = [], [], []
@@ -163,6 +182,9 @@ def main() -> None:
                 f"show_every={args.show_every}",
                 f"batch_size={args.batch_size}",
                 f"train_op={args.train_op}",
+                f"start_episode={args.start_episode}",
+                f"resume_ow={args.resume_ow}",
+                f"resume_cw={args.resume_cw}",
                 f"best_valid_ratio={best_valid_ratio}",
                 f"wall_clock_s={wall_clock:.6f}",
                 f"weights_ow={weights_ow}",

@@ -5,6 +5,9 @@ import warnings
 import numpy as np
 warnings.filterwarnings("ignore")
 import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
+tf.compat.v1.disable_v2_behavior()
+tf = tf.compat.v1
 tf.logging.set_verbosity(tf.logging.ERROR)
 np.random.seed(1)
 

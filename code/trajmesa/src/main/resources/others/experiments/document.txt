@@ -1,0 +1,14 @@
+step1:load->preprocess->store
+1.1. 按照resource中preprocess_store.json（tdrive轨迹数据的配置示例）配置文件的格式完成配置；
+1.2. 在集群上执行spark-submit命令。例如：
+spark-submit --class com.urbancomputing.geomesa.apply.experiment.PreprocessStoreApp  --master yarn --deploy-mode cluster --num-executors 20 --executor-memory 8G  geomesa-apply_2.11-2.3.0-jar-with-dependencies.jar hdfs://hostname/ hdfs://hostname/file/path/preprocess_store.json
+
+step2:query
+2.1. 按照FetchObjectId、FetchTrajId中所示获取objectId和trajId。
+2.2. 按照IdTemporalQuery、KnnQuery、SimilarityQuery、SpatialQuery、SpatialTemporalQuery中所示的方式对轨迹进行各类查询。
+
+配置文件部分参数说明：
+1."fileMode"有两个取值。 "multi_file"：表示每个object的轨迹数据位于一个独立的文件中（像t_drive）;"single_file":表示所有object的轨迹数据位于同一个文件中。
+2."partNum"根据数据量和集群硬件配置设置。
+1."storePoint"。true:表示对轨迹进行纵向存储;false：表示对轨迹不做纵向存储。默认是true。
+2."storeList"。true:表示对轨迹做横向存储;false：表示对轨迹不做横向存储。默认是true。
