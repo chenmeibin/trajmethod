@@ -1,0 +1,1 @@
+sample_input.txt	100	1	6	1

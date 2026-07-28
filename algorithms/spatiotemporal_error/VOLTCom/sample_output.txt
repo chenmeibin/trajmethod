@@ -1,0 +1,25 @@
+39.904200 116.407400 1609430400000
+39.904300 116.407550 1609430401000
+
+========================================
+Performance Statistics
+========================================
+Original Points: 5
+Compressed Segments: 2
+Compression Ratio: 40.000000%
+
+--- Compression ---
+Total Compression Time: 0.000000 us
+Average Time per Point: 0.000000 us/point
+
+--- Decompression ---
+Total Decompression Time: 0.000000 us
+Average Time per Point: 0.000000 us/point
+
+--- Accuracy (Coordinate-space error) ---
+Error Threshold (epsilon): 0.000010
+Average Error: 0.000000
+Maximum Error: 0.000000
+
+--- Trajectory Segments ---
+Number of Segments: 1

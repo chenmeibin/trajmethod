@@ -1,0 +1,2 @@
+model_checkpoint_path: "D:\\all_traj_method\\RLTS\\batch-rlts\\save\\rlts_tdrive_ratio_0p5_split622\\trained_model.ckpt"
+all_model_checkpoint_paths: "D:\\all_traj_method\\RLTS\\batch-rlts\\save\\rlts_tdrive_ratio_0p5_split622\\trained_model.ckpt"

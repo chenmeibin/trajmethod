@@ -1,0 +1,9 @@
+﻿points=908
+compression_ratio=13.906828
+compressed_fraction=0.071907
+compression_time_us=1544
+decompression_time_us=109
+reconstruction_time_us=46
+compressed_bytes=1567
+original_bytes=21792
+max_error=0.000100

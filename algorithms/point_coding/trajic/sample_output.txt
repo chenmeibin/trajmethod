@@ -1,0 +1,2 @@
+Trajic 需要在安装 Boost 的 Linux/WSL 环境中编译后运行。
+运行命令：./trajic c sample_input.txt
