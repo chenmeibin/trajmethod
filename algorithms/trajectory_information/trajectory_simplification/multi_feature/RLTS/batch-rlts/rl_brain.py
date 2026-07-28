@@ -35,7 +35,7 @@ class PolicyGradient:
         #fc1 'batch normalization if any'
         layer = tf.layers.dense(
             inputs=self.tf_obs,
-            units=20, #try diff neurons for skipping setting (e.g., algorithms/multi_feature/RLTS 20 in geolife, RLTS-Skip 5 in geolife)
+            units=20, #try diff neurons for skipping setting (e.g., trajectory_information/trajectory_simplification/multi_feature/RLTS 20 in geolife, RLTS-Skip 5 in geolife)
             activation=tf.nn.tanh,  # tanh activation
             name='fc1'
         )

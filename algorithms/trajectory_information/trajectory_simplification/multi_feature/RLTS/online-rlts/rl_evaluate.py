@@ -55,8 +55,8 @@ if __name__ == "__main__":
     traj_path = '../TrajData/Geolife_out/'
     test_amount = 100
     elist = [i for i in range(1100, 1100 + test_amount - 1)]
-    a_size = 3 #algorithms/multi_feature/RLTS 3, RLTS-Skip 5
-    s_size = 3 #algorithms/multi_feature/RLTS and RLTS-Skip are both 3 online
+    a_size = 3 #trajectory_information/trajectory_simplification/multi_feature/RLTS 3, RLTS-Skip 5
+    s_size = 3 #trajectory_information/trajectory_simplification/multi_feature/RLTS and RLTS-Skip are both 3 online
     ratio = 0.1
     env = TrajComp(traj_path, 3000, a_size, s_size)
     RL = PolicyGradient(env.n_features, env.n_actions)
